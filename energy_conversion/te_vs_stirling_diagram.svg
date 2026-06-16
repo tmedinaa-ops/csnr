@@ -1,0 +1,152 @@
+<svg viewBox="0 0 1000 820" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#374151"/>
+    </marker>
+    <marker id="arh" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#d9531e"/>
+    </marker>
+    <marker id="arc" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#2e75b6"/>
+    </marker>
+    <pattern id="regen" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="8" height="8" fill="#fde9c8"/>
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#c98a3a" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <rect x="0" y="0" width="1000" height="820" fill="#ffffff"/>
+
+  <text x="500" y="34" text-anchor="middle" font-size="24" font-weight="bold" fill="#1f2937">SNAP-10A power conversion: thermoelectric vs Stirling</text>
+  <text x="500" y="60" text-anchor="middle" font-size="15" fill="#6b7280">Same reactor heat in, same radiator out. Only the converter in the middle changes.</text>
+
+  <!-- Reactor source -->
+  <rect x="90" y="80" width="820" height="44" rx="6" fill="#f4b183" stroke="#d9531e" stroke-width="1.5"/>
+  <text x="500" y="107" text-anchor="middle" font-size="16" font-weight="bold" fill="#7a2e0e">REACTOR CORE   ~32 kWt thermal   NaK hot side ~775 K</text>
+  <line x1="290" y1="124" x2="290" y2="150" stroke="#d9531e" stroke-width="3" marker-end="url(#arh)"/>
+  <line x1="710" y1="124" x2="710" y2="150" stroke="#d9531e" stroke-width="3" marker-end="url(#arh)"/>
+
+  <line x1="500" y1="150" x2="500" y2="486" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="5 5"/>
+
+  <!-- ================= LEFT: THERMOELECTRIC ================= -->
+  <text x="290" y="172" text-anchor="middle" font-size="17" font-weight="bold" fill="#b5610f">THERMOELECTRIC  (SNAP-10A, flew 1965)</text>
+
+  <!-- hot shoe -->
+  <rect x="205" y="186" width="170" height="20" fill="#e8895a" stroke="#d9531e"/>
+  <text x="290" y="200" text-anchor="middle" font-size="11" fill="#5b1f08">tungsten hot shoe</text>
+  <!-- legs -->
+  <rect x="222" y="206" width="48" height="96" fill="#1b9e9e" stroke="#0d5c5c"/>
+  <text x="246" y="258" text-anchor="middle" font-size="15" font-weight="bold" fill="#ffffff">N</text>
+  <rect x="310" y="206" width="48" height="96" fill="#3aa0a0" stroke="#0d5c5c"/>
+  <text x="334" y="258" text-anchor="middle" font-size="15" font-weight="bold" fill="#ffffff">P</text>
+  <text x="290" y="320" text-anchor="middle" font-size="11" fill="#374151">SiGe legs (As-doped N, B-doped P)</text>
+  <!-- cold base -->
+  <rect x="205" y="324" width="170" height="18" fill="#9dc3e6" stroke="#2e75b6"/>
+  <text x="290" y="337" text-anchor="middle" font-size="11" fill="#13385f">aluminum cold side ~591 K</text>
+  <!-- current loop -->
+  <path d="M246,206 L246,170 L334,170 L334,206" fill="none" stroke="#374151" stroke-width="2"/>
+  <path d="M222,342 L150,342 L150,250" fill="none" stroke="#374151" stroke-width="2" marker-end="url(#ar)"/>
+  <path d="M358,342 L430,342 L430,250" fill="none" stroke="#374151" stroke-width="2"/>
+  <text x="150" y="240" text-anchor="middle" font-size="12" fill="#374151">+ current out</text>
+  <text x="430" y="240" text-anchor="middle" font-size="12" fill="#374151">to load</text>
+
+  <!-- TE callouts -->
+  <text x="290" y="372" text-anchor="middle" font-size="13" fill="#374151">Seebeck voltage across each couple. No moving parts.</text>
+  <text x="290" y="392" text-anchor="middle" font-size="13" fill="#374151">1440 couples. Most heat conducts straight through,</text>
+  <text x="290" y="410" text-anchor="middle" font-size="13" fill="#374151">which is why the efficiency is low.</text>
+
+  <!-- TE stats -->
+  <rect x="150" y="424" width="280" height="56" rx="6" fill="#fdeee2" stroke="#e6781e" stroke-width="1.5"/>
+  <text x="290" y="446" text-anchor="middle" font-size="14" font-weight="bold" fill="#b5610f">1.82% overall   |   581 We   |   8.3 W/kg</text>
+  <text x="290" y="467" text-anchor="middle" font-size="13" fill="#b5610f">captures 7.7% of the Carnot ceiling</text>
+
+  <!-- ================= RIGHT: STIRLING ================= -->
+  <text x="710" y="172" text-anchor="middle" font-size="17" font-weight="bold" fill="#0d7777">STIRLING  (KRUSTY / Kilopower, 2018)</text>
+
+  <!-- hot end -->
+  <rect x="625" y="186" width="170" height="20" fill="#e8895a" stroke="#d9531e"/>
+  <text x="710" y="200" text-anchor="middle" font-size="11" fill="#5b1f08">heat-pipe hot end (design 950–1073 K)</text>
+
+  <!-- cylinder -->
+  <rect x="640" y="206" width="140" height="36" fill="#f8d7c4" stroke="#9ca3af"/>
+  <text x="710" y="229" text-anchor="middle" font-size="11" fill="#7a2e0e">hot gas space (expands)</text>
+  <rect x="640" y="242" width="140" height="20" fill="url(#regen)" stroke="#9ca3af"/>
+  <text x="710" y="256" text-anchor="middle" font-size="11" fill="#5b3a12">regenerator</text>
+  <rect x="640" y="262" width="140" height="30" fill="#d6e4f2" stroke="#9ca3af"/>
+  <text x="710" y="281" text-anchor="middle" font-size="11" fill="#13385f">cold gas space (compresses)</text>
+  <!-- power piston -->
+  <rect x="652" y="294" width="116" height="16" fill="#6b7280" stroke="#374151"/>
+  <text x="710" y="306" text-anchor="middle" font-size="10" fill="#ffffff">power piston</text>
+  <!-- alternator -->
+  <rect x="668" y="312" width="84" height="26" fill="#cbd5e1" stroke="#374151"/>
+  <line x1="676" y1="312" x2="676" y2="338" stroke="#374151"/>
+  <line x1="688" y1="312" x2="688" y2="338" stroke="#374151"/>
+  <line x1="700" y1="312" x2="700" y2="338" stroke="#374151"/>
+  <line x1="712" y1="312" x2="712" y2="338" stroke="#374151"/>
+  <line x1="724" y1="312" x2="724" y2="338" stroke="#374151"/>
+  <line x1="736" y1="312" x2="736" y2="338" stroke="#374151"/>
+  <line x1="744" y1="312" x2="744" y2="338" stroke="#374151"/>
+  <text x="710" y="329" text-anchor="middle" font-size="10" fill="#1f2937">linear alternator</text>
+  <path d="M752,325 L820,325 L820,250" fill="none" stroke="#0d7777" stroke-width="2.5" marker-end="url(#arc)"/>
+  <text x="820" y="240" text-anchor="middle" font-size="12" font-weight="bold" fill="#0d7777">AC out</text>
+
+  <!-- cold end -->
+  <rect x="625" y="340" width="170" height="18" fill="#9dc3e6" stroke="#2e75b6"/>
+  <text x="710" y="353" text-anchor="middle" font-size="11" fill="#13385f">cold end ~590 K</text>
+
+  <!-- Stirling callouts -->
+  <text x="710" y="378" text-anchor="middle" font-size="13" fill="#374151">Helium cycles: expand against the hot space,</text>
+  <text x="710" y="396" text-anchor="middle" font-size="13" fill="#374151">compress in the cold. The regenerator recycles heat,</text>
+  <text x="710" y="414" text-anchor="middle" font-size="13" fill="#374151">so the cycle runs close to Carnot. Moving parts.</text>
+
+  <!-- Stirling stats -->
+  <rect x="570" y="424" width="280" height="56" rx="6" fill="#e3f4f4" stroke="#1b9e9e" stroke-width="1.5"/>
+  <text x="710" y="446" text-anchor="middle" font-size="14" font-weight="bold" fill="#0d7777">7–11% here (25%+ hot)   |   2.3–3.5 kWe</text>
+  <text x="710" y="467" text-anchor="middle" font-size="13" fill="#0d7777">~50 W/kg   |   30–46% of the Carnot ceiling</text>
+
+  <!-- radiator -->
+  <line x1="290" y1="480" x2="290" y2="506" stroke="#2e75b6" stroke-width="3" marker-end="url(#arc)"/>
+  <line x1="710" y1="480" x2="710" y2="506" stroke="#2e75b6" stroke-width="3" marker-end="url(#arc)"/>
+  <rect x="90" y="508" width="820" height="42" rx="6" fill="#9dc3e6" stroke="#2e75b6" stroke-width="1.5"/>
+  <text x="500" y="534" text-anchor="middle" font-size="15" font-weight="bold" fill="#13385f">RADIATOR   ~5–6 m²   rejects ~30 kW at ~590 K   (nearly the same for both)</text>
+
+  <!-- differences table -->
+  <text x="500" y="584" text-anchor="middle" font-size="16" font-weight="bold" fill="#1f2937">How they differ</text>
+  <g font-size="13" fill="#1f2937">
+    <rect x="90" y="596" width="820" height="28" fill="#f3f4f6"/>
+    <text x="250" y="615" text-anchor="middle" font-weight="bold">Thermoelectric</text>
+    <text x="700" y="615" text-anchor="middle" font-weight="bold" fill="#0d7777">Stirling</text>
+    <text x="100" y="615" font-weight="bold" fill="#6b7280"></text>
+
+    <text x="100" y="645">Moving parts</text>
+    <text x="250" y="645" text-anchor="middle">none, solid state</text>
+    <text x="700" y="645" text-anchor="middle">piston + displacer</text>
+
+    <text x="100" y="673">Efficiency (here)</text>
+    <text x="250" y="673" text-anchor="middle">1.8%</text>
+    <text x="700" y="673" text-anchor="middle">7–11%, more when hotter</text>
+
+    <text x="100" y="701">Output, same reactor</text>
+    <text x="250" y="701" text-anchor="middle">0.58 kWe</text>
+    <text x="700" y="701" text-anchor="middle">2.3–3.5 kWe</text>
+
+    <text x="100" y="729">Specific power</text>
+    <text x="250" y="729" text-anchor="middle">8.3 W/kg</text>
+    <text x="700" y="729" text-anchor="middle">~50 W/kg</text>
+
+    <text x="100" y="757">Flight heritage</text>
+    <text x="250" y="757" text-anchor="middle">flew 1965, 43 days</text>
+    <text x="700" y="757" text-anchor="middle">KRUSTY ground test 2018</text>
+
+    <text x="100" y="785">Best when</text>
+    <text x="250" y="785" text-anchor="middle">simplicity, long life</text>
+    <text x="700" y="785" text-anchor="middle">power and mass matter</text>
+  </g>
+  <line x1="90" y1="624" x2="910" y2="624" stroke="#d1d5db"/>
+  <line x1="90" y1="652" x2="910" y2="652" stroke="#eceff2"/>
+  <line x1="90" y1="680" x2="910" y2="680" stroke="#eceff2"/>
+  <line x1="90" y1="708" x2="910" y2="708" stroke="#eceff2"/>
+  <line x1="90" y1="736" x2="910" y2="736" stroke="#eceff2"/>
+  <line x1="90" y1="764" x2="910" y2="764" stroke="#eceff2"/>
+  <line x1="500" y1="596" x2="500" y2="796" stroke="#d1d5db"/>
+</svg>

@@ -1,0 +1,28 @@
+# =============================================================================
+# CSNR .gitattributes
+# Store all text as LF in the repo so Windows/WSL never injects CRLF. A .sh with
+# CRLF fails in WSL with a confusing "bad interpreter" error; these rules prevent
+# that regardless of which machine commits.
+# =============================================================================
+
+# default: detect text, normalize to LF in the repo
+* text=auto eol=lf
+
+# force LF on the files that must stay Unix (scripts, inputs, source)
+*.sh   text eol=lf
+*.py   text eol=lf
+*.i    text eol=lf
+*.md   text eol=lf
+*.csv  text eol=lf
+*.xml  text eol=lf
+*.svg  text eol=lf
+
+# binary files: never convert line endings or attempt to diff
+*.e     binary
+*.h5    binary
+*.png   binary
+*.pdf   binary
+*.docx  binary
+*.pptx  binary
+*.xlsx  binary
+*.zip   binary

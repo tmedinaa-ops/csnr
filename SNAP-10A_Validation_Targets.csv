@@ -1,0 +1,89 @@
+area,parameter,value,units,conditions,source,confidence
+shielding,LiH fast-neutron removal cross section (recommended),0.156,cm^-1,"LiH 0.7 g/cc, 700F, SNAP-10A",NAA-SR-MEMO-8768 p.4,high
+shielding,LiH removal cross section (prior value),0.128,cm^-1,infinite-medium assumption,NAA-SR-MEMO-8768 p.3,high
+shielding,LiH removal cross section range (DTK-aniso / AIM-6 agreement),0.15-0.16,cm^-1,,NAA-SR-MEMO-8768 p.4,high
+shielding,STF experimental removal cross section,0.166-0.170,cm^-1,LiH 0.756 g/cc slabs in air,NAA-SR-MEMO-8768 p.4,high
+shielding,SNAP-2 removal cross section,0.160,cm^-1,"600F, 0.721 g/cc",NAA-SR-MEMO-8768 p.4,high
+shielding,Flux reduction at mating-plane centerline (0.128 to 0.156),~6,factor,,NAA-SR-MEMO-8768 p.4,high
+shielding,FMC-N effective attenuation coeff at 71.5 cm (no reflector),0.131,cm^-1,,NAA-SR-MEMO-8969 p.7-8,high
+shielding,FMC-N effective attenuation coeff at 71.5 cm (with reflector),0.144,cm^-1,,NAA-SR-MEMO-8969 p.7-8,high
+shielding,FMC-N effective attenuation coeff at 91.5 cm (no reflector),0.136,cm^-1,,NAA-SR-MEMO-8969 p.7-8,high
+shielding,FMC-N effective attenuation coeff at 91.5 cm (with reflector),0.145,cm^-1,,NAA-SR-MEMO-8969 p.7-8,high
+shielding,Flux ratio mating-plane / below-shield (total avg),0.0359,ratio,284.3 cm vs 91.5 cm,NAA-SR-MEMO-8969 Table 4,high
+shielding,Flux ratio mating-plane / below-shield (central 10 cm),0.0405,ratio,,NAA-SR-MEMO-8969 Table 4,high
+shielding,Flux per source neutron below shield (91.5 cm, 0-29.2 cm radius),1.553e-10,n/cm2 per source n,,NAA-SR-MEMO-8969 Table 4,medium
+shielding,Flux per source neutron at mating plane (284.3 cm, 0-50.4 cm radius),5.58e-12,n/cm2 per source n,,NAA-SR-MEMO-8969 Table 4,medium
+shielding,Reflector-scattered fast-neutron fraction,0.125,fraction,below shield (1 in 8),NAA-SR-MEMO-8969 p.10-11,high
+shielding,Hurst-dosimeter response vs flux attenuation,1.45,factor (less),through shield,NAA-SR-MEMO-8969 p.9,medium
+shielding,Integrated gamma dose design limit,1e7,roentgen,dose plane, normal operation,NAA-SR-9901 p.11,high
+shielding,Integrated fast-neutron fluence design limit,1e12,nvt,">0.1 MeV (9901); 9898 says >1.0 MeV - conflict",NAA-SR-9901 p.11,high
+shielding,Reference dose plane location,284.3 (17.5 ft),cm,from core bottom,NAA-SR-9901 / NAA-SR-MEMO-8969,high
+shielding,Reference dose plane diameter,5,ft,,NAA-SR-9901,high
+shielding,Max nuclear-heating temperature rise (top of shield),54,F,,NAA-SR-9901 p.24,medium
+shielding,Fig 1 flux at 0 in (curve start),~4e18,n/cm2-yr,top of shield,NAA-SR-MEMO-8768 Fig 1 (digitized +/-0.4 decade),low
+shielding,Fig 1 flux at 25 in (DTK anisotropic),~1.5e13,n/cm2-yr,bottom of plotted depth,NAA-SR-MEMO-8768 Fig 1 (digitized),low
+shielding,Fig 1 total attenuation across ~24 in LiH,~5-5.5,decades,DTK/AIM-6 curves,NAA-SR-MEMO-8768 Fig 1 (digitized),low
+reactor,OpenMC vs MCNP5 keff (average absolute diff),304 +/- 70,pcm,73 SNAP-10A/2 configs,arXiv 2505.04024 Sec IV,high
+reactor,OpenMC vs MCNP5 keff (max diff),-725 +/- 71,pcm,case 8490l3,arXiv 2505.04024 Sec IV,high
+reactor,OpenMC vs experiment keff (average),355,pcm,58 experiments,arXiv 2505.04024 Sec IV,high
+reactor,OpenMC vs experiment keff (max),-1048,pcm,case 8490e7,arXiv 2505.04024 Sec IV,high
+reactor,Cardinal coupled keff,1.00086 +/- 0.00024,dimensionless,drums positioned to criticality,arXiv 2505.04024 Sec V.E,high
+reactor,Power peaking factor,1.98,dimensionless,coupled model,arXiv 2505.04024 Sec V.E,high
+reactor,Fuel temperature (average),805.6,K,coupled model,arXiv 2505.04024 Sec V.E,high
+reactor,Fuel temperature (maximum),853.3,K,coupled model,arXiv 2505.04024 Sec V.E,high
+reactor,Fuel temperature diff vs NAA-SR-9903,-0.9,K,,arXiv 2505.04024 Sec V.E,high
+reactor,Fluid temperature (maximum),843.2,K,coupled model,arXiv 2505.04024 Sec V.E,high
+reactor,Fluid temperature (average),786.3,K,coupled model,arXiv 2505.04024 Sec V.E,high
+reactor,Fluid temperature diff vs NAA-SR-9903,+3.0,K,,arXiv 2505.04024 Sec V.E,high
+reactor,Reynolds number (NekRS),2357.05,dimensionless,flow regime,arXiv 2505.04024 Sec V.C,medium
+fuel,TRANCORE vs AIREK III max flux difference,<6.5,%,1-10% of peak power,NAA-SR-MEMO-9589 p.13,high
+fuel,TRANCORE vs analog peak flow difference,7.5,%,nominal startup,NAA-SR-MEMO-9589 p.17,high
+fuel,TRANCORE thermoelectric-pump model vs TAP-2,within 1,%,steady state and transient,NAA-SR-MEMO-9589 p.16,high
+fuel,TRANCORE l/beta* ratio,~1600,dimensionless,SNAP 10A/2,NAA-SR-MEMO-9589 p.12,medium
+fuel,TRANCORE excess reactivity at sensible heat,~26.5,cents,,NAA-SR-MEMO-9589 p.17,medium
+fuel,BOOMER core-melting energy limit,~160,MW-sec,uncontrolled excursion,NAA-SR-8414 p.5,high
+fuel,BOOMER hydrogen-release plateau (observed),2200,F,modeled conservatively at 3000F,NAA-SR-8414 p.6-8,medium
+fuel,BOOMER fuel melting point (model switchover),1925,K,,NAA-SR-8414 App D,medium
+fuel,BOOMER hydrogen heat of transport Q*,1270,cal/mole,,NAA-SR-8414 App D,medium
+fuel,BOOMER hydrogen dissociation energy,39.6,kcal/mole,,NAA-SR-8414 App D,medium
+fuel,FUSAK hydrogen dissociation/redistribution results,not found,,NAA-SR-11400 not on OSTI full text,FUSAK,n/a
+startup,Time from startup command to full power (flight design),9.75,hr,3h25m from sensible heat,NAA-SR-9720 p.55,high
+startup,Max instantaneous outlet temperature rate,9.5,F/sec,45 s after peak power,NAA-SR-9720 p.55,high
+startup,Heat shield ejected after sensible heat,~215,sec,at 275F core outlet,NAA-SR-9720 p.55,medium
+startup,Final nominal reactor outlet temperature,~1010,F,,NAA-SR-9720 p.55,medium
+startup,Coarse control-drum worth,~4.80 ($6.40 to $1.60 subcritical),dollars,,NAA-SR-9720 p.49,medium
+startup,Grid-plate temperature coefficient (upper / lower),-0.05 each,cents/F,,NAA-SR-9720 Table 5,medium
+ground-test,FS-3 prompt reactor temperature coefficient,-0.29 +/- 0.02,cents/F,measured,NAA-SR-11397,high
+ground-test,FS-3 time to full power,8.0,hr,control drums 33.7 deg from full-in,NAA-SR-11397,medium
+ground-test,FS-3 operating thermal power,39.5-40,kWt,ground endurance,NAA-SR-11397,medium
+ground-test,FS-3 continuous operation,>390,days,,NAA-SR-11397,high
+energy-conversion,Design electrical power output (initial),581,We,initial; >=500 We at EOL over 1 yr at design voltage,NAA-SR-11955 Table 1-2,high
+energy-conversion,EOL minimum power requirement,500,We,throughout 1-yr mission at design voltage,NAA-SR-11955 Table 1,high
+energy-conversion,Closed-circuit (terminal) voltage,28.5,V,design point; 28.5 x 20.4 = 581 W,NAA-SR-11955 Table 2,high
+energy-conversion,Open-circuit voltage (steady-state),61.7,V,design point; apparent internal-R mismatch vs R and I to reconcile,NAA-SR-11955 Table 2,medium
+energy-conversion,Converter current,20.4,A,design point; two parallel paths ~10 A each,NAA-SR-11955 Table 2,high
+energy-conversion,Converter internal resistance,1.40,ohm,design point,NAA-SR-11955 Table 2,high
+energy-conversion,Heat input,31.90,kWt,design point,NAA-SR-11955 Table 2,high
+energy-conversion,Heat rejected,31.32,kWt,closes energy balance 31.90-0.581,NAA-SR-11955 Table 2,high
+energy-conversion,Overall conversion efficiency,1.82,%,581 We / 31.90 kWt; also min spec,NAA-SR-11955 Table 1-2,high
+energy-conversion,Device (material) efficiency,7.65,%,design point; overall = device x Carnot,NAA-SR-11955 Table 2,high
+energy-conversion,Carnot efficiency (avg NaK - avg radiator),23.8,%,1 - 1063R/1395R,NAA-SR-11955 Table 2,high
+energy-conversion,Thermoelectric material,SiGe 67 at% Si / 33 at% Ge,,used alloy (70/30 nominal design); W hot shoes; As-doped N legs,NAA-SR-11955 p.15-16,high
+energy-conversion,Element / couple count,2880 elements / 1440 couples,,40 leg assemblies parallel; leg=3 modules A20+B24+C28=72 series; 2 parallel paths of 720 couples,NAA-SR-11955 p.12,high
+energy-conversion,Avg hot-junction temperature,902,F,avg; max 954 / min 850; 483C avg,NAA-SR-11955 Table 2,high
+energy-conversion,Avg cold-junction temperature,604,F,avg; max 656 / min 552; 318C avg,NAA-SR-11955 Table 2,high
+energy-conversion,NaK inlet / outlet / avg temperature,987 / 883 / 935,F,converter inlet = reactor outlet 987F = 530.6C,NAA-SR-11955 Table 2,high
+energy-conversion,Radiator area at temperature,62.5,ft^2,=5.8 m^2; 65 ft^2 max spec; conical frustum 52-in base dia,NAA-SR-11955 Table 1-2,high
+energy-conversion,Radiator emissivity / fin effectiveness,0.89 / 0.90,,design point,NAA-SR-11955 Table 2,high
+energy-conversion,Converter+radiator wet weight,154,lb,142.9 dry; 265 lb/kWe specific weight,NAA-SR-11955 Table 3,high
+energy-conversion,Specific power,3.75,W/lb,581 We / 154 lb; inverse of 265 lb/kWe,NAA-SR-11955 Conclusions p.110,high
+energy-conversion,First-year power degradation,<6,%,ground and flight qualified,NAA-SR-11955 Conclusions p.110,high
+energy-conversion,Converter reliability,0.996,,at 50% confidence,NAA-SR-11955 Conclusions p.110,high
+energy-conversion,SiGe module endurance,>14000,hr,at 1300 F; SNAP-10A config with improved bonding,NAA-SR-11955 Conclusions p.110,high
+energy-conversion,Measured device efficiency,6.0-6.5,%,FS-3/FS-4/FSM-4 graph read Fig 44 vs 7.65 design,NAA-SR-11955 Fig 44,low
+energy-conversion,Measured overall efficiency,1.3-1.5,%,FS-3/FS-4/FSM-4 graph read Fig 44 vs 1.82 design,NAA-SR-11955 Fig 44,low
+energy-conversion,Measured matched-load power (normalized),0.30-0.34,W/cm2,graph read Fig 43 normalized to 920F NaK; declines with time,NAA-SR-11955 Fig 43,low
+energy-conversion,Flight peak electrical power,~590-600,We,~12 h after launch; consistent with 581 design initial,Drew Ex Machina / Schmidt 2011,medium
+energy-conversion,Flight stabilized electrical power,~530-533,We,steady mission level,Drew Ex Machina,medium
+energy-conversion,Mission duration,43,days,ended by Agena voltage-regulator failure,arXiv 2505.04024 / Wikipedia,high
+energy-conversion,Reactor thermal power (design rating),30-31.9,kWt,converter heat input 31.90 kWt at design point,NAA-SR-11955 Table 2 / Schmidt 2011,medium
