@@ -185,7 +185,17 @@ Hw   = 5.01e4
   # condition. Read the plateau off the console / solid_3d.csv instead; the last
   # several steps should be flat to < 0.5 K.
   dt = 25.0
-  num_steps = 60
+  num_steps = 40
+  # Tight (Picard) coupling each step. With the default operator-split (one
+  # OpenMC<->solid<->THM exchange per step, lagged) the coupled solution creeps
+  # toward steady at dt=25 instead of settling -- the dt=1 MVP looked fast only
+  # because its exchange was effectively tight. fixed_point_max_its>1 iterates the
+  # transfers to convergence within each step so the march settles at the physical
+  # rate (a few hundred seconds), not the coupling-lag rate. OpenMC's k barely
+  # moves with T here, so the per-step Picard loop converges in a few iterations.
+  fixed_point_max_its = 20
+  fixed_point_rel_tol  = 1e-4
+  fixed_point_abs_tol  = 1e-6
   solve_type = NEWTON
   petsc_options_iname = '-pc_type'
   petsc_options_value = ' lu'
