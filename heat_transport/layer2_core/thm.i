@@ -173,8 +173,11 @@ n_ax   = 30
     type = Exodus
     show = 'T T_wall Hw'
   []
-  [csv]                       # T_fluid_out / T_fluid_in per step; read the last
-    type = CSV                # row for the converged NaK outlet (~817 K target)
-    file_base = thm_nak
+  [csv]
+    # per-channel CSV (T_fluid_out, heat_removed). NO file_base on purpose: the THM
+    # MultiApp runs multiple instances (center/mid/edge), so MOOSE must auto-name
+    # each one by sub-app index. Forcing a shared file_base makes all instances
+    # write the same file, which is the error this Layer 2 first run hit.
+    type = CSV
   []
 []
