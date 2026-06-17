@@ -56,6 +56,15 @@
   type = OpenMCCellAverageProblem
   verbose = true
 
+  # Override the snap model.xml statistics for the COUPLED march. model.xml is built
+  # for standalone production criticality (1,000,000 particles/batch), which is a
+  # memory spike and ruinously slow when OpenMC re-solves every coupling step. The
+  # relaxed march (robbins_monro) averages the source across the ~280 steps, so each
+  # solve needs only modest statistics. 20k/batch is plenty here; take the final
+  # reported k and source from one high-statistics STANDALONE solve at the converged
+  # temperature, not from the march. (If it is still slow, also cut the batch count.)
+  particles = 20000
+
   # FULL CORE power, not per-pin. All 37 pins are present now.
   # (34 kWt is the arXiv / shield design point; FS-3 endurance ran 39.5-40 kWt.
   #  If you switch power, change it here AND in the validation targets.)
