@@ -185,7 +185,7 @@ Hw   = 5.01e4
   # condition. Read the plateau off the console / solid_3d.csv instead; the last
   # several steps should be flat to < 0.5 K.
   dt = 25.0
-  num_steps = 60
+  num_steps = 360
   # Pseudo-transient march: ONE coupled exchange per step (max_its = 1), NOT a
   # converged Picard loop inside each step. The earlier max_its=20 / rel_tol=1e-4
   # was the wrong strategy and caused the dt-bisection-to-death. Each fixed-point
@@ -194,11 +194,19 @@ Hw   = 5.01e4
   # iteration (initial 1.13e3, iter 19 still 2.3e1), nowhere near 1e-4 in 20 its
   # (~300 would be needed). So every step was rejected, dt halved 8x to 25/256 s,
   # and the run advanced 3.9 s in 40 steps while burning 20 OpenMC solves per
-  # thrown-away step. Instead lag the source one step and let the time march
-  # (60 x 25 s = 1500 s ~= 4.6 tau) carry the system to steady; robbins_monro in
-  # openmc.i averages the OpenMC source across steps and keeps the lagged march
-  # stable (dt/tau ~ 0.08). Read the plateau off solid_3d.csv. If it is jittery,
-  # raise OpenMC batches/particles to cut source noise before touching coupling.
+  # thrown-away step. Instead lag the source one step and let the time march carry
+  # the system to steady; robbins_monro in openmc.i averages the OpenMC source
+  # across steps and keeps the lagged march stable (dt/tau small).
+  #
+  # num_steps = 360 (9000 s). The first 60-step run reached only ~55% of the rise:
+  # the real effective time constant is ~1200-1500 s (NOT the 325 s guessed
+  # earlier), backed out from the storage rate (~410 W into ~18-23 kJ/K of solid),
+  # so 1500 s was only ~1.25 tau. 9000 s clears ~6 tau with margin. NO
+  # steady_state_detection on purpose: near steady the per-step solution change is
+  # dominated by OpenMC Monte-Carlo noise, so a norm-based detector trips on noise.
+  # Judge steady PHYSICALLY instead: thm_nak.csv power_imbalance (918.92 W minus
+  # NaK heat removed) -> 0, together with the max_fuel_T increment flattening.
+  # Steady targets: NaK outlet 817.7 K (matches the 2-D MVP), max_fuel_T ~826-832 K.
   fixed_point_max_its = 1
   solve_type = NEWTON
   petsc_options_iname = '-pc_type'

@@ -147,6 +147,30 @@ n_ax   = 30
     boundary = 'pipe:in'
     execute_on = 'INITIAL TIMESTEP_END'
   []
+  # ---- physical steady-state convergence check (energy closure) --------------
+  # At steady the NaK must carry away exactly the power put in, so this is the
+  # convergence test, not a solution-norm tolerance (which trips on OpenMC noise
+  # near steady). heat_removed uses the TRUE inlet enthalpy = the inlet BC
+  # (755.37 K), NOT the SideAverageValue T_fluid_in, which carries a ~3 K
+  # boundary-cell averaging offset. mdot*cp = 0.0167541 * 879.903 = 14.742 W/K.
+  # Steady when power_imbalance -> 0 (target |imbalance| < ~9 W, ~1% of 918.92).
+  # NOTE: 'expression' is modern-MOOSE ParsedPostprocessor syntax; if this build
+  # errors on it, rename 'expression' -> 'function' (fails instantly at setup, not
+  # mid-run, so it costs nothing to find out).
+  [heat_removed]
+    type = ParsedPostprocessor
+    expression = 'mdot * cp * (T_fluid_out - T_in)'
+    pp_names = 'T_fluid_out'
+    constant_names = 'mdot cp T_in'
+    constant_expressions = '0.0167541 879.903 755.37'
+    execute_on = 'INITIAL TIMESTEP_END'
+  []
+  [power_imbalance]
+    type = ParsedPostprocessor
+    expression = '918.92 - heat_removed'
+    pp_names = 'heat_removed'
+    execute_on = 'INITIAL TIMESTEP_END'
+  []
 []
 
 [Outputs]
