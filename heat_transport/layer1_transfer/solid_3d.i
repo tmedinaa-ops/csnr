@@ -185,16 +185,21 @@ Hw   = 5.01e4
   # condition. Read the plateau off the console / solid_3d.csv instead; the last
   # several steps should be flat to < 0.5 K.
   dt = 25.0
-  num_steps = 40
-  # Tight (Picard) coupling each step. The default operator-split (one
-  # OpenMC<->solid<->THM exchange per step, lagged) makes the coupled solution
-  # creep toward steady at dt=25 instead of settling. fixed_point_max_its>1
-  # iterates the transfers to convergence within each step so it settles at the
-  # physical rate. OpenMC's k barely moves with T here, so the Picard loop
-  # converges in a few iterations per step.
-  fixed_point_max_its = 20
-  fixed_point_rel_tol  = 1e-4
-  fixed_point_abs_tol  = 1e-6
+  num_steps = 60
+  # Pseudo-transient march: ONE coupled exchange per step (max_its = 1), NOT a
+  # converged Picard loop inside each step. The earlier max_its=20 / rel_tol=1e-4
+  # was the wrong strategy and caused the dt-bisection-to-death. Each fixed-point
+  # iteration is a full OpenMC eigenvalue solve, and against the genuinely changing
+  # transient plus Monte-Carlo noise the relaxed coupling only creeps ~1.7% per
+  # iteration (initial 1.13e3, iter 19 still 2.3e1), nowhere near 1e-4 in 20 its
+  # (~300 would be needed). So every step was rejected, dt halved 8x to 25/256 s,
+  # and the run advanced 3.9 s in 40 steps while burning 20 OpenMC solves per
+  # thrown-away step. Instead lag the source one step and let the time march
+  # (60 x 25 s = 1500 s ~= 4.6 tau) carry the system to steady; robbins_monro in
+  # openmc.i averages the OpenMC source across steps and keeps the lagged march
+  # stable (dt/tau ~ 0.08). Read the plateau off solid_3d.csv. If it is jittery,
+  # raise OpenMC batches/particles to cut source noise before touching coupling.
+  fixed_point_max_its = 1
   solve_type = NEWTON
   petsc_options_iname = '-pc_type'
   petsc_options_value = ' lu'
