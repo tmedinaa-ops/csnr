@@ -175,15 +175,12 @@ Hw   = 5.01e4
   type = Transient
   scheme = bdf2
   start_time = 0
-  # Pseudo-transient march to steady. Pin thermal time constant is ~325 s, so
-  # num_steps * dt must clear ~4-5 tau: 60 * 25 = 1500 s ~= 4.6 tau reaches ~99%
-  # of the steady rise. (The old num_steps=40 = 1000 s = 3.1 tau left ~5%, ~3 K,
-  # still moving.) FIXED steps, no steady_state_detection: the OpenMC source is
-  # stochastic, and with a small dt the per-step solution change drops under any
-  # tolerance before the pin has physically heated -- that false trip is what
-  # stopped the prior run at t=4 s with the fuel still at its 783 K initial
-  # condition. Read the plateau off the console / solid_3d.csv instead; the last
-  # several steps should be flat to < 0.5 K.
+  # Pseudo-transient march to steady, fixed steps. steady_state_detection is
+  # deliberately OFF: with the stochastic OpenMC source it tripped on Monte Carlo
+  # noise before the pin had heated. dt=25, num_steps=40 = 1000 s of model time.
+  # With the tight (Picard) coupling set below, the solution settles at the
+  # physical rate, so temperatures should be flat well before step 40; read the
+  # plateau off the console / solid_3d.csv (last rows agree to < 0.5 K).
   dt = 25.0
   num_steps = 40
   # Tight (Picard) coupling each step. With the default operator-split (one

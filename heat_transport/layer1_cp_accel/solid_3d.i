@@ -1,18 +1,25 @@
 # =============================================================================
-# SNAP-10A fuel pin conduction  --  HUB app (Layer 1 two-way + NaK loop)
+# SNAP-10A fuel pin conduction  --  HUB app  (cp-ACCELERATED steady cross-check)
 # =============================================================================
-# This is the center of the star: a 3-D single pin that (a) pulls the live
-# kappa-fission heat source from OpenMC and pushes temperature back, and (b)
-# exchanges wall/fluid temperature and HTC with the THM NaK channel. It is the
-# MVP's solid.i grown to 3-D with OpenMC added as a second sub-app; the THM
-# coupling is unchanged.
+# IDENTICAL physics to ../layer1_transfer/solid_3d.i EXCEPT the solid heat
+# capacity is cut 4x to accelerate the march to steady, and dt/num_steps are
+# retuned to the shortened time constant. This is the fast steady config and the
+# cross-check that the heat-capacity acceleration is steady-EXACT: at dT/dt = 0
+# the time term vanishes, so rho*cp cannot affect the converged temperatures, and
+# the energy balance that sets the NaK outlet (P / (mdot*cp_NaK)) has no solid cp
+# in it. PASS CRITERION: this run must land on the SAME steady values the long
+# layer1_transfer march reaches, NaK outlet 817.7 K and max_fuel_T ~826-832 K, in
+# far fewer OpenMC solves. If it does, the cp trick is validated and becomes the
+# default fast iterate config; only the per-step transient path differs, which we
+# never report. Runs self-contained in this folder (own XMLs/mesh/outputs), so it
+# can run concurrently with layer1_transfer on spare cores.
 #
 #   OpenMC (openmc.i)  <-- heat_source / temperature -->  THIS  <-- T_wall /
 #   T_fluid / htc -->  THM (thm.i)
 #
 # Prereqs: snap_unit_pin.py exported the OpenMC XMLs, and make_mesh.i produced
 # pin3d.e. Run:
-#   cardinal-opt -i solid_3d.i
+#   bash run_layer1.sh          # (or: cardinal-opt -i solid_3d.i)
 # =============================================================================
 
 L    = 0.310515
@@ -121,10 +128,14 @@ Hw   = 5.01e4
 
 # Thermal conductivities: see k_of_T_sources.md for the full sourcing.
 # Only thermal_conductivity sets the steady temperature; density and
-# specific_heat only set the march speed, so they are left as the prior
-# constants. U-ZrH and Sm2O3 stay constant because the literature gives no
-# defensible T-dependence in this band (U-ZrH is ~flat per Simnad; Sm2O3 is
-# poorly characterized). Hastelloy N has a real, sourced k(T), so it is tabulated.
+# specific_heat only set the march speed, so they are the acceleration knob here.
+# CP-ACCELERATED: specific_heat is cut 4x vs layer1_transfer (fuel 300->75,
+# coating 400->100, clad 578->144.5) to shrink the ~1200-1500 s time constant to
+# ~300-375 s, so the march reaches steady in ~50 steps instead of ~360. This does
+# NOT change the converged temperatures (cp drops out at dT/dt=0); it only coarsens
+# the transient path we never report. thermal_conductivity is UNTOUCHED (it is what
+# sets steady). U-ZrH and Sm2O3 k stay constant (no defensible T-dependence per the
+# literature); Hastelloy N has a real, sourced k(T), so it is tabulated.
 [Materials]
   [fuel_mat]      # U-ZrH (SCA-4). k = 22.484 = reference model (arXiv 2505.04024
                   # Table II). Simnad GA-A16029 gives ~18 W/m-K, ~flat in T; that
@@ -133,14 +144,14 @@ Hw   = 5.01e4
     type = GenericConstantMaterial
     block = fuel
     prop_names  = 'thermal_conductivity density specific_heat'
-    prop_values = '22.484 6000.0 300.0'
+    prop_values = '22.484 6000.0 75.0'   # cp 300->75 (cp/4 accel; steady-exact)
   []
   [coating_mat]   # Sm2O3 coating. k = 1.729 = reference model (arXiv Table II).
                   # Low confidence: no usable T-dependent data for the sesquioxide.
     type = GenericConstantMaterial
     block = coating
     prop_names  = 'thermal_conductivity density specific_heat'
-    prop_values = '1.729 7400.0 400.0'
+    prop_values = '1.729 7400.0 100.0'   # cp 400->100 (cp/4 accel; steady-exact)
   []
   [clad_k]        # Hastelloy N k(T), ORNL/MSDR correlation
                   # k = 9.77 - 3.2e-4 T + 1.46e-5 T^2  (W/m-K, T in K).
@@ -160,7 +171,7 @@ Hw   = 5.01e4
     type = GenericConstantMaterial
     block = clad
     prop_names  = 'density specific_heat'
-    prop_values = '8860.0 578.0'
+    prop_values = '8860.0 144.5'   # cp 578->144.5 (cp/4 accel; steady-exact)
   []
 []
 
@@ -175,39 +186,28 @@ Hw   = 5.01e4
   type = Transient
   scheme = bdf2
   start_time = 0
-  # Pseudo-transient march to steady; FIXED steps, no steady_state_detection. The
-  # dt/num_steps choice and the corrected ~1200-1500 s time constant are explained
-  # in the block just below (the earlier "~325 s" estimate was wrong).
-  dt = 100.0
-  num_steps = 350   # the dt=100/90 run reached only ~80% (outlet 805.5/817.7,
-                    # imbalance 180 W): the loose one-exchange-per-step coupling
-                    # converges ~1.5%/step, so it needs ~250-290 steps to hit the
-                    # 9 W mark, NOT the ~90 first guessed. Watch power_imbalance and
-                    # stop early when it is under ~9 W (1% of 918.92); 350 is a cap.
-  # Pseudo-transient march: ONE coupled exchange per step (max_its = 1), NOT a
-  # converged Picard loop inside each step. The earlier max_its=20 / rel_tol=1e-4
-  # was the wrong strategy and caused the dt-bisection-to-death. Each fixed-point
-  # iteration is a full OpenMC eigenvalue solve, and against the genuinely changing
-  # transient plus Monte-Carlo noise the relaxed coupling only creeps ~1.7% per
-  # iteration (initial 1.13e3, iter 19 still 2.3e1), nowhere near 1e-4 in 20 its
-  # (~300 would be needed). So every step was rejected, dt halved 8x to 25/256 s,
-  # and the run advanced 3.9 s in 40 steps while burning 20 OpenMC solves per
-  # thrown-away step. Instead lag the source one step and let the time march carry
-  # the system to steady; robbins_monro in openmc.i averages the OpenMC source
-  # across steps and keeps the lagged march stable (dt/tau small).
+  # CONTROLLED COMPARISON vs layer1_transfer. Identical executioner (dt=100,
+  # num_steps=90, max_its=1) so the ONLY difference from layer1_transfer is the
+  # solid cp, cut 4x in [Materials] above. This isolates whether the slow approach
+  # to steady is thermal-mass-paced or coupling-paced.
   #
-  # dt = 100, num_steps = 90 -> 9000 s: same physical span, 4x fewer OpenMC solves
-  # than dt=25/360. Steady is dt-INDEPENDENT (time term vanishes at dT/dt=0), so the
-  # larger step changes nothing about the converged answer; dt=25 was over-resolving
-  # a transient path we never report. The effective time constant is ~1200-1500 s
-  # (NOT the 325 s guessed earlier), backed out from the storage rate (~410 W into
-  # ~18-23 kJ/K of solid); the first dt=25 run reached ~55% of the rise by 1500 s
-  # (~1.25 tau). 9000 s clears ~6 tau with margin. NO
-  # steady_state_detection on purpose: near steady the per-step solution change is
-  # dominated by OpenMC Monte-Carlo noise, so a norm-based detector trips on noise.
-  # Judge steady PHYSICALLY instead: thm_nak.csv power_imbalance (918.92 W minus
-  # NaK heat removed) -> 0, together with the max_fuel_T increment flattening.
-  # Steady targets: NaK outlet 817.7 K (matches the 2-D MVP), max_fuel_T ~826-832 K.
+  # Why this matters: the layer1_transfer dt=100 run reached only ~80% of the rise
+  # in 90 steps (outlet 805.5 of 817.7, imbalance 180 W), and it does NOT lie on the
+  # same physical-time curve as the earlier dt=25 run (55% at 1500 s). That points
+  # at the loose one-exchange-per-step OpenMC<->solid<->THM coupling converging ~1.5%
+  # per step, i.e. a slow fixed-point iteration, not a physical thermal lag.
+  #   - If cp is the pace-setter, this cp/4 run reaches steady FAR sooner than step
+  #     90 (outlet 817.7, imbalance < 9 W well before the end). cp acceleration wins.
+  #   - If it tracks the same ~80%-at-step-90 curve, the pace is the COUPLING, not
+  #     mass, so cp is a dead end; march ~300 steps or accelerate the coupling.
+  # Either way, compare fraction-done step-for-step against layer1_transfer.
+  #
+  # NO steady_state_detection (MC noise trips a norm detector). Judge steady
+  # PHYSICALLY: thm_nak.csv power_imbalance (918.92 W minus NaK heat removed) -> 0,
+  # with the max_fuel_T increment flat. PASS target if it converges: outlet 817.7 K,
+  # max_fuel_T ~826-832 K (must match layer1_transfer; cp cannot change steady).
+  dt = 100.0
+  num_steps = 90
   fixed_point_max_its = 1
   solve_type = NEWTON
   petsc_options_iname = '-pc_type'
