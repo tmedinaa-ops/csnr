@@ -74,19 +74,23 @@ Hw   = 5.01e4
   []
 []
 
-# ---- NaK conjugate coupling, multi-channel ----------------------------------
-# Representative-channel start (ROADMAP): 3 channels by radial ring, center / mid /
-# edge, which captures the hot-to-average spread without 37 of everything. The THM
-# MultiApp below launches thm.i at these 3 positions; this action maps each clad
-# surface to its nearest channel by position. Refine to all 37 positions once the
-# 3-channel version converges.
+# ---- NaK conjugate coupling: ALL 37 channels, energy-exact ------------------
+# One THM channel per pin at the 37 pin centers (pin_positions.txt), so each pin's
+# clad surface couples to its OWN co-located channel carrying one pin's flow. Energy
+# -exact: each pin's power goes into its pin's NaK and makes the right ~62 K rise,
+# and 37 channels reproduce the full 0.6199 kg/s core flow.
 #
-# !! VERIFY: position-based mapping of ONE 'outer' sideset to multiple channels is
-# the least-tested mechanic here. If the action will not split one sideset across
-# channels, the fallback is 3 separate sidesets (outer_c/outer_m/outer_e from
-# make_core_mesh.i TODO #2) and 3 CoupledHeatTransfers blocks, each the validated
-# single-channel Layer 1 coupling. That fallback is lower risk; start there if this
-# fights you.
+# THIS is what was wrong at 3 channels: per the MOOSE CoupledHeatTransferAction docs,
+# the action builds a NearestPointLayeredSideAverage that partitions 'outer' by the
+# nearest sub-app position, but it only knows those positions if you pass 'positions'
+# to the ACTION, not just the MultiApp. Without it, the whole 37-pin surface collapsed
+# onto a single channel -> the ~33 kW that "vanished" from the energy balance.
+# Both the action and the MultiApp now read the SAME pin_positions.txt.
+#
+# Z: the mesh is centered on z (+-L/2) to match snap.py, but thm.i's flow channel
+# runs 0..L in its own frame, so pin_positions.txt offsets each channel to z=-L/2
+# (-0.1552575), seating it on the centered pin. 'position' below stays '0 0 0' (the
+# per-channel axial base, copied from thm.i's FlowChannel1Phase, per the docs).
 [CoupledHeatTransfers]
   [interface]
     boundary = 'outer'
@@ -101,6 +105,7 @@ Hw   = 5.01e4
     orientation = '0 0 1'
     length = ${L}
     n_elems = ${n_ax}
+    positions_file = 'pin_positions.txt'   # <-- 37 pin centers; the missing piece
     skip_coordinate_collapsing = true
   []
 []
@@ -116,11 +121,10 @@ Hw   = 5.01e4
     input_files = 'thm.i'
     execute_on = timestep_end
     sub_cycling = true
-    # 3 representative channels: center pin 1, a ring-2 pin (11), a ring-3 pin (24)
-    # positions in meters (snap.py fuel_positions/100). Grow to all 37 later.
-    positions = '0 0 0
-                 0 0.0640080 0
-                 0 0.0960120 0'
+    # all 37 channels, one per pin, at the pin centers shifted to the centered-mesh
+    # z (-L/2). Same file the CoupledHeatTransfers action reads, so the sub-app
+    # placement and the surface partition use identical points. 37 tiny 1-D apps.
+    positions_file = 'pin_positions.txt'
   []
 []
 
