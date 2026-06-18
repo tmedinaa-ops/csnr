@@ -62,10 +62,14 @@ Hw   = 5.01e4
     type = HeatConduction
     variable = T
   []
-  [time]
-    type = HeatConductionTimeDerivative
-    variable = T
-  []
+  # NO time-derivative kernel (removed June 2026). The Cardinal OpenMC+solid+THM
+  # tutorial (gas_assembly) solves the solid as STEADY conduction each Picard step
+  # and converges in ~6-10 iterations. Carrying a real rho*cp HeatConductionTime-
+  # Derivative instead turned this into a physical thermal transient paced by the
+  # ~7000 s thermal time constant -> the 350-step, ~3-hour march. At steady the time
+  # term is identically zero, so dropping it does NOT change the converged answer,
+  # only the (now irrelevant) approach path. density/specific_heat in [Materials]
+  # are now unused (harmless).
   [source]
     type = CoupledForce
     variable = T
@@ -185,21 +189,20 @@ Hw   = 5.01e4
 []
 
 [Executioner]
-  # Pseudo-transient march to steady, single coupled exchange per step, same as the
-  # final Layer 1 setup. LESSON FROM LAYER 1: the approach is paced by the loose
-  # one-exchange-per-step OpenMC<->solid<->THM coupling (~1.5% error reduction per
-  # step), NOT a physical thermal time constant, so it takes MANY steps. Layer 1's
-  # single pin needed ~250-290 steps to reach the 1%-imbalance mark at dt=100; the
-  # 37-pin core is unlikely to be faster, so num_steps starts at 350 and you STOP
-  # when power_imbalance (below) drops under ~1% of 34000 = ~340 W. NO
-  # steady_state_detection (MC noise trips a norm-based detector). Whether cutting
-  # solid cp accelerates this is the open question Layer 1's cp_accel run is testing;
-  # if it does, cut cp here too and num_steps drops hard.
+  # Fixed-point (Picard) march to steady. With the solid time-derivative removed
+  # (see [Kernels]), each step is a full STEADY conduction solve and "num_steps" is
+  # just the Picard iteration count, exactly as the Cardinal gas_assembly tutorial
+  # runs it (num_steps = 10, converged in 6). dt is now only the clock that drives
+  # the THM sub-app's sub_cycling, not physical time. 25 iterations is a safe budget
+  # with constant 0.5 relaxation on the OpenMC source; power_imbalance and max_fuel_T
+  # should flatten well before then. NO steady_state_detection on THIS app (MC noise
+  # trips a norm detector); read convergence off the plateau. This replaces the old
+  # 350-step ~3-hour physical-transient march.
   type = Transient
   scheme = bdf2
   start_time = 0
   dt = 100.0
-  num_steps = 350
+  num_steps = 25
   fixed_point_max_its = 1
   solve_type = NEWTON
   petsc_options_iname = '-pc_type'

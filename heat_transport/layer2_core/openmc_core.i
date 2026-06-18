@@ -38,6 +38,19 @@
     family = MONOMIAL
     order = CONSTANT
   []
+  # RADIAL DIAGNOSTIC (added June 2026). These two settle the flat-power question in
+  # one run: open solid_core_out_openmc0.e in ParaView and color core37 by cell_id.
+  # 37 distinct values across the 37 pins = pins resolved as distinct cells (per-pin
+  # power is real). One uniform value = the tally is collapsing (then revisit the
+  # model.xml / cell_level). Also color by heat_source to see the actual peaking.
+  [cell_id]
+    family = MONOMIAL
+    order = CONSTANT
+  []
+  [cell_instance]
+    family = MONOMIAL
+    order = CONSTANT
+  []
 []
 
 [AuxKernels]
@@ -50,6 +63,14 @@
     type = CellMaterialIDAux
     variable = material_id
   []
+  [cell_id]
+    type = CellIDAux
+    variable = cell_id
+  []
+  [cell_instance]
+    type = CellInstanceAux
+    variable = cell_instance
+  []
 []
 
 [Problem]
@@ -58,11 +79,11 @@
 
   # Override the snap model.xml statistics for the COUPLED march. model.xml is built
   # for standalone production criticality (1,000,000 particles/batch), which is a
-  # memory spike and ruinously slow when OpenMC re-solves every coupling step. The
-  # relaxed march (robbins_monro) averages the source across the ~280 steps, so each
-  # solve needs only modest statistics. 20k/batch is plenty here; take the final
-  # reported k and source from one high-statistics STANDALONE solve at the converged
-  # temperature, not from the march. (If it is still slow, also cut the batch count.)
+  # memory spike and ruinously slow when OpenMC re-solves every coupling step. With
+  # constant relaxation the coupled solve converges in ~10-25 fixed-point iterations
+  # (one OpenMC solve each), so each solve needs only modest statistics. 20k/batch is
+  # plenty here; take the final reported k and source from one high-statistics
+  # STANDALONE solve at the converged temperature, not from the march.
   particles = 20000
 
   # FULL CORE power, not per-pin. All 37 pins are present now.
@@ -74,9 +95,15 @@
   scaling = 100.0
 
   # cell_level: the snap geometry nests root -> cell_core(fill=HexLattice) ->
-  # fuel_p{i} universes -> rod/tube/coolant cells. The pin cells therefore sit
-  # one universe level below the lattice container. START AT 1 and verify; if the
-  # mapping is wrong, try 2. The volume check below is what catches a wrong level.
+  # fuel_p{i} universes -> rod/tube/coolant cells. cell_level = 1 is CORRECT and is
+  # verified against the Cardinal lattice regression test (test/tests/neutronics/
+  # feedback/lattice uses cell_level=1 for exactly this root->cell(fill=lattice)->
+  # pin-universe nesting): level 1 is where the 37 distinct pin universes/cells live.
+  # Do NOT raise to 2 (that resolves SUB-pin cells and needs a finer mesh). If the
+  # per-pin power still looks flat, the cause is NOT here: check the cell_id AuxVar
+  # (must show 37 distinct values) and the THM partition. The volume check below can
+  # NOT catch a collapse to one cell (one bin = trivially equal volumes), so cell_id
+  # is the real diagnostic. Ref: cardinal.cels.anl.gov CellTally / pincell tutorial.
   cell_level = 1
 
   # take the solid T on these blocks into the matching OpenMC cells
@@ -86,8 +113,14 @@
   # the usual symptom of a wrong cell_level or a mesh/geometry misalignment.
   check_equal_mapped_tally_volumes = true
 
-  # Robbins-Monro relaxes the Picard heat-source updates across steps (same as L1)
-  relaxation = robbins_monro
+  # Relaxation damps the Picard heat-source updates so the coupled solve converges
+  # without oscillating. Constant 0.5 is what the Cardinal gas_assembly tutorial (the
+  # OpenMC+solid+THM analog of this model) uses; it converges in ~6-10 iterations and
+  # beats robbins_monro (1/n averaging) for a short fixed-iteration march. The doc
+  # calls 0.5 "necessary to accelerate the fixed point iterations ... otherwise
+  # oscillations occur."
+  relaxation = constant
+  relaxation_factor = 0.5
 
   [Tallies]
     [heat_source]

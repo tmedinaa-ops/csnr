@@ -121,7 +121,12 @@ n_ax   = 30
   start_time = 0
   dt = 0.25
   dtmin = 1e-5
-  num_steps = 100000        # high cap: with sub_cycling the parent (dt=25) drives total time
+  num_steps = 100000        # high cap; steady_state_detection stops each call early
+  # Stop each THM call once its channel reaches steady (residence ~1.3 s) instead of
+  # grinding the whole sub_cycle window. THM is deterministic, so a norm detector is
+  # safe here (unlike the OpenMC-coupled parent). Large sub-cycle saving.
+  steady_state_detection = true
+  steady_state_tolerance = 1e-8
   abort_on_solve_fail = true
   solve_type = NEWTON
   line_search = basic
@@ -135,35 +140,42 @@ n_ax   = 30
 []
 
 [Postprocessors]
+  # Outlet bulk temperature. SideAverageValue on a THM flow-channel boundary returns
+  # the adjacent CELL-CENTROID value (THM is cell-centered finite volume), so it
+  # carries a half-cell offset. It is the tool the THM CHT tutorial uses for T_out;
+  # read it as "near-outlet bulk T", not an exact face value.
   [T_fluid_out]
     type = SideAverageValue
     variable = T
     boundary = 'pipe:out'
     execute_on = 'INITIAL TIMESTEP_END'
   []
-  [T_fluid_in]
+  # DO NOT read this as "the inlet temperature." SideAverageValue at pipe:in returns
+  # the FIRST cell centroid, half a cell downstream of the physical inlet, and on a
+  # hot short channel it sits tens of K above the real inlet -- exactly what made the
+  # old heat_removed read ~30% high. The true inlet is the BC: T_in = 755.37 K. Kept
+  # only as a diagnostic of the boundary offset.
+  [T_fluid_in_diag]
     type = SideAverageValue
     variable = T
     boundary = 'pipe:in'
     execute_on = 'INITIAL TIMESTEP_END'
   []
-  # ---- PER-CHANNEL heat removal (NOT a per-channel convergence check) ---------
-  # heat_removed is the power THIS channel carries away: mdot*cp*(T_out - T_in),
-  # true inlet enthalpy = the inlet BC 755.37 K (not SideAverageValue T_fluid_in,
-  # which has a ~3 K boundary-cell offset). mdot*cp = 0.0167541*879.903 = 14.742 W/K.
-  # In the core this varies channel to channel with radial peaking, so there is NO
-  # single per-channel reference to difference against (Layer 1's 918.92 trick does
-  # not apply). The CONVERGENCE check lives at the core level in solid_core.i
-  # (power_in vs total clad-surface heat flux). heat_removed here just reports each
-  # channel's NaK rise so you can see the hot/cold spread across the 3 channels.
-  # NOTE: 'expression' is modern-MOOSE ParsedPostprocessor syntax; if the build
-  # errors on it, rename 'expression' -> 'function' (fails at setup, not mid-run).
-  [heat_removed]
-    type = ParsedPostprocessor
-    expression = 'mdot * cp * (T_fluid_out - T_in)'
-    pp_names = 'T_fluid_out'
-    constant_names = 'mdot cp T_in'
-    constant_expressions = '0.0167541 879.903 755.37'
+  # ---- PER-CHANNEL heat actually delivered to the NaK (THE FIX, June 2026) -----
+  # Integrate the real wall convective flux Hw*P_hf*(T_wall - T) the solver applied,
+  # instead of differencing side-average temperatures. This is the CONSERVING
+  # quantity: summed over the 37 channels it must equal the solid's surface_heat_out
+  # (= power_in). The old mdot*cp*(T_out - T_in) gave three disagreeing numbers
+  # (26.6 / 44.4 kW vs the solid's 34.3) because both side averages are biased; this
+  # reads the heat the fluid genuinely received. ADHeatRateConvection1Phase pulls the
+  # T_wall that HeatTransferFromExternalAppTemperature1Phase transferred in, so it
+  # covers the external-app coupling directly. (If the build rejects the AD object,
+  # switch to HeatRateConvection1Phase -- fails at setup, not mid-run.)
+  # Ref: MOOSE THM ADHeatRateConvection1Phase; single_phase_flow CHT tutorial step 2.
+  [heat_added]
+    type = ADHeatRateConvection1Phase
+    block = pipe
+    P_hf = ${P_hf}
     execute_on = 'INITIAL TIMESTEP_END'
   []
 []
@@ -174,10 +186,11 @@ n_ax   = 30
     show = 'T T_wall Hw'
   []
   [csv]
-    # per-channel CSV (T_fluid_out, heat_removed). NO file_base on purpose: the THM
-    # MultiApp runs multiple instances (center/mid/edge), so MOOSE must auto-name
-    # each one by sub-app index. Forcing a shared file_base makes all instances
-    # write the same file, which is the error this Layer 2 first run hit.
+    # per-channel CSV (T_fluid_out, T_fluid_in_diag, heat_added). NO file_base on
+    # purpose: the THM MultiApp runs 37 instances, so MOOSE auto-names each by sub-app
+    # index (solid_core_out_thmNN). Forcing a shared file_base makes all instances
+    # write the same file. CHECK THE RUN: sum heat_added over the 37 files -> must
+    # equal ~power_in (NOT 44 kW); its spread across pins = the real radial peaking.
     type = CSV
   []
 []
