@@ -1,25 +1,22 @@
 # =============================================================================
-# Layer 2: full 37-pin core conduction  --  HUB app  (UNTESTED DRAFT)
+# Layer 2: 37-pin core conduction + NaK -- SOLID sub-app  (restructured June 2026)
 # =============================================================================
-# The Layer 1 hub (solid_3d.i) grown from one pin to the 37-pin core. Same star:
-# the solid is the center, OpenMC (openmc_core.i) and THM (thm.i) are sub-apps.
-# OpenMC hands the kappa-fission heat in and reads temperature back; THM exchanges
-# wall/fluid temperature and HTC. The output that matters is the hot-channel NaK
-# outlet, which feeds ../energy_conversion.
+# RESTRUCTURED: this used to be the main app with OpenMC as a sub-app. It is now a
+# SUB-APP of openmc.i (OpenMC is the main app). Run the coupled model with
+#   cardinal-opt -i openmc.i        (NOT this file directly)
 #
-#   OpenMC (openmc_core.i) <-- heat/temperature --> THIS <-- T_wall/T_fluid/htc -->
-#   THM bundle (thm.i at N positions)
+# This file owns the solid conduction and the 37-channel NaK conjugate coupling
+# (CoupledHeatTransfers -> thm.i). The OpenMC parent fills the fuel 'power' AuxVar by
+# transfer and reads the solid T back. Each time OpenMC calls this app, it converges
+# the solid<->THM CONJUGATE loop (the fixed_point loop in [Executioner]) against the
+# frozen heat source -- this is the cheap inner loop the restructure isolates so
+# OpenMC only solves once per outer step.
 #
-# Prereqs: core37.e built (make_core_mesh.i), and snap.py's model.xml present for
-# OpenMC (see openmc_core.i header). Run:
-#   cardinal-opt -i solid_core.i
+#   openmc.i (main) --power--> THIS (solid) --T_wall--> thm.i (37 channels)
+#        <-- temperature --            <-- T_fluid / htc --
 #
-# BUILD ORDER (per ROADMAP_full_core.md, do not skip): get core37.e inspected,
-# then run THIS one-way with a FROZEN source first (comment out the openmc MultiApp
-# and the two OpenMC transfers, drive 'power' from extract_heat_source.py's radial+
-# axial CSV), confirm the NaK bundle and conduction behave, THEN switch the live
-# OpenMC coupling back on. Debugging the bundle and the neutronics at the same time
-# is the thing this layering exists to avoid.
+# Prereqs: core37.e (make_core_mesh.i); snap.py model.xml (see openmc.i header). The
+# solid + THM physics are the validated Layer 1 pattern; only the hierarchy moved.
 # =============================================================================
 
 L    = 0.310515
@@ -115,11 +112,10 @@ Hw   = 5.01e4
 []
 
 [MultiApps]
-  [openmc]
-    type = TransientMultiApp
-    input_files = 'openmc_core.i'
-    execute_on = timestep_end
-  []
+  # OpenMC is no longer a sub-app here -- it is the MAIN app (openmc.i) and THIS file
+  # is its sub-app. The fuel 'power' AuxVar is filled by a transfer from the OpenMC
+  # parent; the solid T is read back up there. Only THM remains a sub-app of the
+  # solid, via the CoupledHeatTransfers action above (the proven 37-channel coupling).
   [thm]
     type = TransientMultiApp
     input_files = 'thm.i'
@@ -132,22 +128,8 @@ Hw   = 5.01e4
   []
 []
 
-[Transfers]
-  [heat_from_openmc]
-    type = MultiAppGeneralFieldShapeEvaluationTransfer
-    from_multi_app = openmc
-    source_variable = heat_source
-    variable = power
-    from_postprocessors_to_be_preserved = heat_source
-    to_postprocessors_to_be_preserved = power_in
-  []
-  [temp_to_openmc]
-    type = MultiAppGeneralFieldShapeEvaluationTransfer
-    to_multi_app = openmc
-    source_variable = T
-    variable = temp
-  []
-[]
+# The OpenMC <-> solid power/temperature transfers now live in the parent openmc.i.
+# (THIS app's only coupling is the CoupledHeatTransfers -> THM, above.)
 
 # Same conductivities as Layer 1 (k_of_T_sources.md): fuel/coating constant,
 # Hastelloy N clad k(T). Copied verbatim so the two layers stay consistent.
@@ -189,21 +171,27 @@ Hw   = 5.01e4
 []
 
 [Executioner]
-  # Fixed-point (Picard) march to steady. With the solid time-derivative removed
-  # (see [Kernels]), each step is a full STEADY conduction solve and "num_steps" is
-  # just the Picard iteration count, exactly as the Cardinal gas_assembly tutorial
-  # runs it (num_steps = 10, converged in 6). dt is now only the clock that drives
-  # the THM sub-app's sub_cycling, not physical time. 25 iterations is a safe budget
-  # with constant 0.5 relaxation on the OpenMC source; power_imbalance and max_fuel_T
-  # should flatten well before then. NO steady_state_detection on THIS app (MC noise
-  # trips a norm detector); read convergence off the plateau. This replaces the old
-  # 350-step ~3-hour physical-transient march.
+  # CONJUGATE inner loop. OpenMC (the parent) calls this app once per outer step as a
+  # FullSolveMultiApp; here we converge the solid<->THM coupling against the frozen
+  # heat source. The fixed_point loop IS the conjugate iteration: each pass solves the
+  # solid (steady conduction, no time derivative) and re-solves the 37 THM channels
+  # (sub_cycling), exchanging wall/fluid temperature and HTC, until power_imbalance
+  # closes. No OpenMC re-solve happens in here -- that is the whole point.
+  #
+  # num_steps = 1: one solid time step per OpenMC call; the work is the fixed_point
+  # loop, not stepping. dt only drives THM sub_cycling. The conjugate is stiff (high
+  # Hw), so give it a generous iteration budget; it stops early on the tol. If it
+  # oscillates or won't close, relax the interface temperature:
+  #   relaxation_factor = 0.7 ; transformed_variables = 'T_fluid'
   type = Transient
   scheme = bdf2
   start_time = 0
   dt = 100.0
-  num_steps = 25
-  fixed_point_max_its = 1
+  num_steps = 1
+  fixed_point_max_its = 50
+  fixed_point_rel_tol = 1e-4
+  fixed_point_abs_tol = 1e-2
+  accept_on_max_fixed_point_iteration = true
   solve_type = NEWTON
   petsc_options_iname = '-pc_type'
   petsc_options_value = ' lu'
