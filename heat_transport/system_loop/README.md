@@ -145,10 +145,16 @@ native). Every block is grounded in the current THM docs and the project's own
 validated `thm.i`, and the energy balance is checked numerically in
 `verify_loop.py`, but the deck itself has not been run. The highest-risk spots on
 first run, in rough order: the `regions` parameter name on `HeatSourceFromTotalPower`
-(some versions name the region list differently), the `SetComponentRealValueControl`
-parameter trio (`component` / `parameter` / `value`), and the auto-added
-postprocessor name `rad_to_space_integral`. If any of those trips, the fix is a
-one-line rename, and the rest of the deck is independent of it.
+(some versions name the region list differently) and the auto-added postprocessor
+name `rad_to_space_integral`. If either trips, the fix is a one-line rename, and
+the rest of the deck is independent of it.
+
+Resolved on the first PC run: the control logic originally used a
+`CopyPostprocessorValueControl` to forward `Q_waste` into control data, which
+errored with "Q_waste already declared" because THM already exposes every
+postprocessor as control data under its own name. The fix was to drop that block
+and have `SetComponentRealValueControl` read the `Q_waste` postprocessor directly
+(`value = Q_waste`).
 
 ## Closing the NaK recirculation (optional refinement)
 

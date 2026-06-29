@@ -511,12 +511,9 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
 []
 
 [ControlLogic]
-  # forward the computed waste heat into a control-data value...
-  [waste_cd]
-    type          = CopyPostprocessorValueControl
-    postprocessor = Q_waste
-  []
-  # ...and set the cold-end source power to it each step
+  # The Q_waste postprocessor is already exposed as control data under its own
+  # name, so the setter reads it directly. (An explicit CopyPostprocessorValueControl
+  # would declare 'Q_waste' a second time -> "already declared" error.)
   [set_cold_power]
     type      = SetComponentRealValueControl
     component = cold_power
