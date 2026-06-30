@@ -1,8 +1,13 @@
 # =============================================================================
-# SNAP-10A 14 kWe system loop  --  reactor -> NaK -> Stirling -> radiator -> space
-# The full heat path, transient. Single NaK loop (no IHX), cold side closed to
-# space. NaK boundaries are prescribed (cold-leg inlet T, return outlet); full
-# NaK recirculation is the optional refinement described in README.md.
+# SNAP-10A 14 kWe system loop  --  RECIRCULATING (closed) version
+# reactor -> NaK -> Stirling -> radiator -> space, and the NaK loops BACK.
+# The heat physically recirculates: each loop's return temperature is fed back to
+# its own inlet, so the NaK that leaves the reactor comes back to it. Flow is the
+# EM pump's known rate (imposed), the realistic and robust choice; a full momentum
+# ring with Pump1Phase is the higher-fidelity alternative noted in README.md.
+# The hot loop is anchored by a temperature-following engine draw (see the
+# closed-loop anchor block below); the cold loop is anchored by the radiator.
+# Companion to the open, validated system_loop.i. Run the open one first.
 # =============================================================================
 # This is the deck the project's heat_transport model stopped short of. The
 # existing mvp/ and layer2_core/ decks end at the NaK outlet on purpose; this
@@ -63,6 +68,20 @@ rel_slope   = -0.61084    # -   d(rel)/d(tau), anchored SNAP(0.762->0.30)/Kilo(0
 tau0        = 0.76195     # -   SNAP anchor tau = 590.37/774.82
 rel_floor   = 0.20
 rel_ceil    = 0.50
+
+# ---- closed-loop anchor (recirculating version) -----------------------------
+# Recirculating both loops removes the fixed inlet temperatures that anchored the
+# open deck, so the hot loop's temperature level would float (a domain with only
+# sources/sinks is defined up to a constant, the singular-system point from the
+# MOOSE workshop). The radiator already anchors the cold loop through its T^4 law.
+# The hot loop is anchored by making the Stirling hot end a TEMPERATURE-FOLLOWING
+# heat draw instead of a fixed power: Q_draw = UA*(T_hot - T_engine_set). The NaK
+# then runs exactly as hot as it must to push the reactor's heat into the engine.
+# UA and T_engine_set are set so the loop settles at the validated design point
+# (reactor outlet 895.6 K, draw 74.1 kW), reproducing the open deck's numbers.
+T_hot_design = ${fparse T_in_hot + Q_reactor / (mdot_hot * 879.903)}   # 895.6 K
+T_engine_set = ${fparse T_hot_design - pinch_hot}                      # 870.6 K engine hot gas
+UA_engine    = ${fparse Q_engine / pinch_hot}                          # 2964 W/K, draw = Q_engine at design
 
 # radiator (HSBoundaryRadiation to space)
 T_space     = 4.0         # K   deep-space sink
@@ -228,7 +247,10 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
     D_h = ${D_hot}
     f   = 0.02
   []
-  # Stirling hot end: NEGATIVE total power = heat sink. Magnitude = Q_engine.
+  # Stirling hot end: NEGATIVE total power = heat sink. In the closed loop the
+  # magnitude is NOT fixed; [ControlLogic] sets it every step to the temperature-
+  # following draw -UA*(T_hot - T_engine_set), which anchors the hot loop. The
+  # value here is just the design-point initial guess.
   [engine_hot_power]
     type  = TotalPower
     power = ${fparse -Q_engine}
@@ -436,6 +458,28 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
     execute_on = 'INITIAL TIMESTEP_END'
   []
 
+  # --- the temperature-following engine draw (the hot-loop anchor) ---
+  # Q_draw = UA*(T_hot - T_engine_set). At steady state the loop forces this to
+  # equal Q_reactor - Q_parasitic = 74.1 kW, which pins T_hot at 895.6 K.
+  [Q_engine_draw]
+    type        = ParsedPostprocessor
+    pp_names    = 'T_hot'
+    constant_names       = 'UA Tset'
+    constant_expressions = '${UA_engine} ${T_engine_set}'
+    # max(0, ...) so the engine only ever REMOVES heat. The loop starts at 650 K,
+    # below T_engine_set, so without the floor the draw would go negative and turn
+    # the hot end into a heat source during warmup. With the floor the engine stays
+    # off until the reactor has heated the NaK past T_engine_set, then it anchors.
+    expression  = 'max(0.0, UA * (T_hot - Tset))'
+    execute_on  = 'INITIAL TIMESTEP_END'
+  []
+  [engine_power_set]               # negative -> heat sink; pushed into engine_hot_power
+    type        = ParsedPostprocessor
+    pp_names    = 'Q_engine_draw'
+    expression  = '-Q_engine_draw'
+    execute_on  = 'INITIAL TIMESTEP_END'
+  []
+
   # --- the efficiency law, evaluated on the live temperatures ---
   [eta]
     type        = ParsedPostprocessor
@@ -445,20 +489,16 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
     expression  = '(1 - T_cold/(T_hot - pinch)) * max(rfl, min(rcl, 0.30 + slope*(T_cold/(T_hot - pinch) - tau0)))'
     execute_on  = 'INITIAL TIMESTEP_END'
   []
-  [electricity]
+  [electricity]                    # eta applied to the live engine draw
     type        = ParsedPostprocessor
-    pp_names    = 'eta'
-    constant_names       = 'Qin'
-    constant_expressions = '${Q_engine}'
-    expression  = 'eta * Qin'
+    pp_names    = 'eta Q_engine_draw'
+    expression  = 'eta * Q_engine_draw'
     execute_on  = 'INITIAL TIMESTEP_END'
   []
   [Q_waste]
     type        = ParsedPostprocessor
-    pp_names    = 'electricity'
-    constant_names       = 'Qin'
-    constant_expressions = '${Q_engine}'
-    expression  = 'Qin - electricity'
+    pp_names    = 'Q_engine_draw electricity'
+    expression  = 'Q_engine_draw - electricity'
     execute_on  = 'INITIAL TIMESTEP_END'
   []
 
@@ -505,7 +545,10 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
   # cylindrical heat structure. It is shown in the Outputs below. At steady state
   # it should match Q_waste (~59.5 kW), confirming the cold side closes to space.
 
-  # --- energy balance check: reactor in = electricity + radiated + parasitic ---
+  # --- anchor / convergence check: reactor = engine draw + parasitic ---
+  # Now a REAL check (unlike the open deck where it was an identity): the engine
+  # draw is set by temperature, so this only reaches ~0 once the hot loop has
+  # anchored at the right level. = Qr - Q_engine_draw - Qpar.
   [energy_residual]
     type        = ParsedPostprocessor
     pp_names    = 'electricity Q_waste'
@@ -517,14 +560,40 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
 []
 
 [ControlLogic]
-  # The Q_waste postprocessor is already exposed as control data under its own
-  # name, so the setter reads it directly. (An explicit CopyPostprocessorValueControl
-  # would declare 'Q_waste' a second time -> "already declared" error.)
+  # Postprocessors are exposed as control data under their own names, so each
+  # setter reads one directly. Four controls run the closed loop:
+
+  # 1. Stirling cold end dumps the waste heat into the rejection NaK.
   [set_cold_power]
     type      = SetComponentRealValueControl
     component = cold_power
     parameter = power
     value     = Q_waste
+  []
+
+  # 2. Stirling hot end draws the temperature-following heat (the hot-loop anchor).
+  [set_engine_power]
+    type      = SetComponentRealValueControl
+    component = engine_hot_power
+    parameter = power
+    value     = engine_power_set
+  []
+
+  # 3. Recirculate the hot loop: the reactor inlet takes the heater's return temp,
+  #    so the NaK that left the reactor comes back to it.
+  [recirc_hot]
+    type      = SetComponentRealValueControl
+    component = hot_inlet
+    parameter = T
+    value     = T_heater_out
+  []
+
+  # 4. Recirculate the cold loop: the cooler inlet takes the radiator's return temp.
+  [recirc_cold]
+    type      = SetComponentRealValueControl
+    component = cold_inlet
+    parameter = T
+    value     = T_rad_out
   []
 []
 
@@ -541,7 +610,8 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
   start_time = 0
   dt     = 2.0
   dtmin  = 1e-4
-  num_steps = 500
+  num_steps = 800        # recirculation adds a slower coupled mode than the open deck;
+                         # steady_state_detection should still trip well before this
 
   solve_type = NEWTON
   line_search = basic
@@ -560,11 +630,11 @@ rad_scale  = ${fparse A_panel / A_rad_geom}        # amplify to the panel area
 [Outputs]
   [console]
     type = Console
-    show = 'T_core_in T_core_out T_heater_out eta electricity Q_waste T_cold rad_to_space_integral energy_residual'
+    show = 'T_core_in T_core_out T_heater_out Q_engine_draw eta electricity Q_waste T_cold rad_to_space_integral energy_residual'
   []
   [csv]
     type = CSV
-    file_base = system_loop
+    file_base = system_loop_closed
   []
   exodus = true
 []

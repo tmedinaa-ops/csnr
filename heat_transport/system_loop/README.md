@@ -149,38 +149,77 @@ first run, in rough order: the `regions` parameter name on `HeatSourceFromTotalP
 name `rad_to_space_integral`. If either trips, the fix is a one-line rename, and
 the rest of the deck is independent of it.
 
-Resolved on the first PC run: the control logic originally used a
-`CopyPostprocessorValueControl` to forward `Q_waste` into control data, which
-errored with "Q_waste already declared" because THM already exposes every
-postprocessor as control data under its own name. The fix was to drop that block
-and have `SetComponentRealValueControl` read the `Q_waste` postprocessor directly
-(`value = Q_waste`).
+Resolved on the first PC run, two issues:
+1. The control logic originally used a `CopyPostprocessorValueControl` to forward
+   `Q_waste` into control data, which errored with "Q_waste already declared"
+   because THM already exposes every postprocessor as control data under its own
+   name. Fix: drop that block, have `SetComponentRealValueControl` read the
+   `Q_waste` postprocessor directly (`value = Q_waste`).
+2. The `T_cold` postprocessor (radiator panel temperature, on `rad_hs:outer`)
+   read `variable = T` and returned 0 K, because in THM the heat-structure solid
+   temperature is `T_solid`, not `T` (which is the flow-channel fluid). With
+   T_cold = 0 the efficiency law collapsed to its 50% ceiling and reported 37 kWe.
+   Fix: `variable = T_solid`. Flow-channel postprocessors stay `T`; only the
+   heat-structure-surface reads use `T_solid`.
+3. After (2) the panel read 446 K (should be ~475) and electricity was 16.3 kWe
+   (should be ~14.6). Cause: the radiator wall was 3 mm. Because `scale` radiates
+   the full 26 m2 but conduction crosses the tube's real small wall area, a 3 mm
+   wall throws a spurious `Q*t/(k*A)` drop of ~40 K from the NaK to the radiating
+   surface, so the panel sat too cold, under-radiated, and the cold side looked
+   colder than it is (which inflated efficiency). Fix: `rad_wall = 0.0005` and
+   `sp_rad k = 50`, so the radiating surface tracks the coolant the way a finned
+   radiator does. This is the seam of the area-folding lumped radiator; the clean
+   alternative is the flat-plate radiator (Layer C) with matched convection and
+   radiation area.
 
-## Closing the NaK recirculation (optional refinement)
+## The recirculating version: system_loop_closed.i
 
-This deck prescribes the NaK boundary temperatures: the primary cold-leg enters
-at 755 K (the reactor inlet) and the rejection loop returns at 475 K (off the
-radiator). That is a well-posed way to pose the heat path, and it is why the deck
-converges cleanly to the targets. It is also where the chosen scope lands: the
-cold side is closed to space, which was the point of carrying the model past the
-NaK outlet.
+`system_loop.i` prescribes the NaK boundary temperatures (primary inlet 755 K,
+rejection return 475 K). That is well-posed and is why it converges cleanly, and
+the cold side is still closed to space. `system_loop_closed.i` goes one step
+further: the NaK physically recirculates, each loop's return temperature feeds
+back into its own inlet, so the NaK that leaves the reactor comes back to it.
 
-Recirculating the NaK itself (returning each loop's outlet back to its own inlet,
-driven by a pump) is a real next step, with two requirements. First, momentum
-closure: replace the inlet/outlet pairs with a `Pump1Phase` and ring the segments
-with junctions. Second, a temperature pin: with the reactor power fixed and the
-engine removal fixed, the primary loop's absolute temperature level floats (any
-uniform offset is also a steady state). The radiator already pins the cold loop
-through its `T^4` law. To pin the hot loop, model the engine hot end as a
-conductance `Q = UA*(T_NaK - T_gas_hot)` against a fixed engine gas temperature
-instead of a fixed power, so the NaK level is set by how hot it must run to push
-74 kW into the engine. That is the physically faithful closed loop, and it is the
-natural follow-up once this open-boundary version is running and trusted.
+Two things change from the open deck, and both come straight from the MOOSE
+workshop notes (the "singular system" point: a domain with only sources and sinks
+has its temperature defined only up to a constant, so once the fixed inlets are
+gone the level must be re-anchored physically).
+
+- Recirculation. Flow is the EM pump's known rate (imposed via
+  `InletMassFlowRateTemperature1Phase`, whose `T` is controllable). Two extra
+  `SetComponentRealValueControl`s feed `T_heater_out` into the reactor inlet and
+  `T_rad_out` into the cooler inlet each step. This is the robust "thermal
+  recirculation" choice. A full momentum ring (`Pump1Phase` plus ring junctions,
+  with the loop pressure solved) is the higher-fidelity alternative; it is more
+  realistic but closed compressible liquid-metal loops are finicky to converge.
+- Hot-loop anchor. The Stirling hot end is no longer a fixed power draw. It is a
+  temperature-following draw `Q_draw = UA*(T_hot - T_engine_set)`, set by control
+  each step. `UA` and `T_engine_set` are chosen (`Q_engine/pinch_hot` and
+  `T_hot_design - pinch_hot`) so the loop settles at the validated point: the NaK
+  runs exactly hot enough to push 74.1 kW into the engine, which pins the reactor
+  outlet at 895.6 K. The radiator still anchors the cold loop through its T^4 law.
+  A floor `max(0, ...)` keeps the engine from acting as a heat source during the
+  cold startup.
+
+It should converge to the same numbers as the open deck (reactor outlet 895.6 K,
+eta 19.6%, 14.6 kWe, 59.5 kW rejected), because the anchor is tuned to that point.
+The differences to watch on the run: `T_core_in` is now a solved, fed-back value
+that should settle near 755 K (not an imposed boundary), `Q_engine_draw` should
+settle at ~74.1 kW, and `energy_residual` (= reactor - draw - parasitic) is now a
+genuine convergence check rather than the identity it was in the open deck, so it
+only reaches ~0 once the hot loop has anchored. Run `system_loop.i` first as the
+reference, then `system_loop_closed.i`. It may take more steps to settle because
+recirculation adds a slower coupled mode (hence `num_steps = 800`).
+
+If convergence is marginal, the workshop notes point at two cheap knobs:
+`automatic_scaling = true` for the coupled system, and switching `line_search`
+from `basic` to `bt` (backtracking) for the stiffer coupling.
 
 ## Files
 
 ```
-system_loop.i    the transient THM deck: reactor -> NaK -> Stirling -> radiator -> space
-verify_loop.py   independent steady-state hand check; prints the deck's targets
-README.md        this file
+system_loop.i         open deck: prescribed NaK boundaries, validated to targets
+system_loop_closed.i  recirculating deck: NaK loops back, temperature-anchored
+verify_loop.py        independent steady-state hand check; prints the targets (both decks)
+README.md             this file
 ```
