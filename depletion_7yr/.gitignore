@@ -1,0 +1,6 @@
+# heavy run outputs stay local; depletion_summary.csv is the committable product
+# (run_*/* not run_*/ so git still descends to see the negation)
+run_*/*
+!run_*/depletion_summary.csv
+depletion_results.h5
+openmc_simulation_n*.h5
