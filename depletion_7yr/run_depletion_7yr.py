@@ -70,11 +70,23 @@ for m in model.materials:
     names = {n[0] if isinstance(n, tuple) else str(n) for n in m.nuclides}
     if any(str(n).startswith("U23") for n in names):
         m.depletable = True
-        if m.volume is None:
-            m.volume = FUEL_VOLUME_CM3
         fuel_mats.append(m)
 if not fuel_mats:
     sys.exit("no uranium-bearing material found in the model; check MODEL_XML")
+
+# FUEL_VOLUME_CM3 is the WHOLE-CORE fuel volume, so split it across the depletable
+# materials, do NOT give each material the full core volume. The old code assigned
+# FUEL_VOLUME_CM3 to every fuel material, which over-counted the fissile inventory
+# by len(fuel_mats) (75x in fig12_test -> 355 kg U235 instead of ~4.75 kg). That
+# left absolute burn correct (set by power) but deflated burnup % by 75x and
+# corrupted the reactivity trajectory. Only fill volumes the model did not carry.
+if all(m.volume is None for m in fuel_mats):
+    per_mat = FUEL_VOLUME_CM3 / len(fuel_mats)
+    for m in fuel_mats:
+        m.volume = per_mat
+elif any(m.volume is None for m in fuel_mats):
+    sys.exit("model carries volume on some fuel materials but not others; "
+             "set them all in the model or none")
 print(f"depleting {len(fuel_mats)} fuel material(s), total volume "
       f"{sum(m.volume for m in fuel_mats):.0f} cm3, power {POWER_W/1e3:.1f} kWt, "
       f"{TIME_YEARS:.0f} years")
