@@ -1,3 +1,5 @@
+> SUPERSEDED July 2026 by `Depletion_Audit_July2026.md`. The volume observation below is real but the fix it implies (divide volume by 75) is wrong: the true root cause is that the fig12 lattice shares one fuel material, so the core depletes as a 0-D lump. Read the audit for the corrected diagnosis and the usable numbers.
+
 # 7-year depletion at 79.1 kWt: what the run says, and the volume bug in it
 
 The PC run finished 23 depletion steps at 79.1 kWt over 7 years. Reading it back against the analytic targets gives a split verdict: the burnup leg is confirmed once a bookkeeping bug is corrected, and the reactivity/EOL leg cannot be read off this run at all because the same bug corrupts it. Fix the run script and rerun before touching the reactivity numbers; the burnup finding already stands.

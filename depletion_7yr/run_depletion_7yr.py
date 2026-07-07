@@ -64,32 +64,36 @@ model.settings.particles = PARTICLES
 model.settings.batches = BATCHES
 model.settings.inactive = INACTIVE
 
-# mark the U-ZrH fuel depletable and give it its volume
+# mark the U-ZrH fuel depletable and give it its volume.
+#
+# IMPORTANT (audit July 2026): the fig12_test HexLattice fills the whole core with a
+# SINGLE shared fuel material (correct for k-eigenvalue, which is why fig12 validated).
+# OpenMC's documented behavior is that a shared material depletes as ONE lumped region
+# unless you differentiate it (usersguide/depletion.rst: "Without any instructions,
+# OpenMC will deplete a single material, and all of the fuel pins will have an identical
+# composition"). So exactly one material carries the whole core's flux; any other
+# U-bearing materials in model.xml are unplaced orphans that never flux (verified: 74 of
+# 75 stayed byte-frozen in every run). The volume that matters is that ONE placed
+# material's, and it must equal the TOTAL core fuel volume (FUEL_VOLUME_CM3 = 8550.8),
+# because that material geometrically occupies the whole core. Giving it 1/N of the core
+# (an earlier mistaken "fix") makes its specific power N x too high and burns it to 100%
+# in ~2.5 yr -> k collapse. So set the full core volume here; divide-equally handles the
+# per-pin split only when DIFF is on.
+DIFF = os.environ.get("DIFF", "0") not in ("0", "", "false", "False")
+
 fuel_mats = []
 for m in model.materials:
     names = {n[0] if isinstance(n, tuple) else str(n) for n in m.nuclides}
     if any(str(n).startswith("U23") for n in names):
         m.depletable = True
+        if m.volume is None:
+            m.volume = FUEL_VOLUME_CM3    # full core volume on the placed shared material
         fuel_mats.append(m)
 if not fuel_mats:
     sys.exit("no uranium-bearing material found in the model; check MODEL_XML")
-
-# FUEL_VOLUME_CM3 is the WHOLE-CORE fuel volume, so split it across the depletable
-# materials, do NOT give each material the full core volume. The old code assigned
-# FUEL_VOLUME_CM3 to every fuel material, which over-counted the fissile inventory
-# by len(fuel_mats) (75x in fig12_test -> 355 kg U235 instead of ~4.75 kg). That
-# left absolute burn correct (set by power) but deflated burnup % by 75x and
-# corrupted the reactivity trajectory. Only fill volumes the model did not carry.
-if all(m.volume is None for m in fuel_mats):
-    per_mat = FUEL_VOLUME_CM3 / len(fuel_mats)
-    for m in fuel_mats:
-        m.volume = per_mat
-elif any(m.volume is None for m in fuel_mats):
-    sys.exit("model carries volume on some fuel materials but not others; "
-             "set them all in the model or none")
-print(f"depleting {len(fuel_mats)} fuel material(s), total volume "
-      f"{sum(m.volume for m in fuel_mats):.0f} cm3, power {POWER_W/1e3:.1f} kWt, "
-      f"{TIME_YEARS:.0f} years")
+print(f"marked {len(fuel_mats)} U-bearing material(s) depletable; the placed one carries "
+      f"the full {FUEL_VOLUME_CM3:.0f} cm3 core, power {POWER_W/1e3:.1f} kWt, "
+      f"{TIME_YEARS:.0f} years, DIFF={'on (per-pin)' if DIFF else 'off (0-D lumped core)'}")
 
 # ---------------- timesteps ----------------------------------------------------------
 # Fine early steps resolve xenon/samarium buildup; half-year steps carry the trend.
@@ -102,9 +106,28 @@ assert abs(sum(timesteps) - TIME_YEARS * 365.25) < 1.0
 RUN_DIR.mkdir(parents=True, exist_ok=True)
 os.chdir(RUN_DIR)
 
-op = openmc.deplete.CoupledOperator(model, chain_file=str(CHAIN_FILE))
-integrator = openmc.deplete.PredictorIntegrator(op, timesteps, power=POWER_W,
-                                                timestep_units="d")
+# DIFF off (default): deplete the shared fuel material as one 0-D lumped core. This is
+#   what the buggy runs actually computed on their placed material, and it is correct for
+#   core-average burnup rate, reactivity slope, and EOL (the quantities this study needs).
+# DIFF on: differentiate the shared material into one material per lattice instance so each
+#   pin burns on its local spectrum (peaking-resolved). diff_volume_method="divide equally"
+#   splits the full-core FUEL_VOLUME_CM3 across the instances (openmc docs). Heavier, and
+#   worth a 2-step smoke test first (confirm >1 material shows Cs137) before a 7-yr run.
+if DIFF:
+    op = openmc.deplete.CoupledOperator(model, chain_file=str(CHAIN_FILE),
+                                        diff_burnable_mats=True,
+                                        diff_volume_method="divide equally")
+else:
+    op = openmc.deplete.CoupledOperator(model, chain_file=str(CHAIN_FILE))
+
+# CECM (predictor-corrector) is more stable than bare predictor for the half-year steps;
+# set INTEGRATOR=predictor to fall back to the original explicit scheme.
+if os.environ.get("INTEGRATOR", "cecm").lower() == "predictor":
+    integrator = openmc.deplete.PredictorIntegrator(op, timesteps, power=POWER_W,
+                                                    timestep_units="d")
+else:
+    integrator = openmc.deplete.CECMIntegrator(op, timesteps, power=POWER_W,
+                                               timestep_units="d")
 integrator.integrate()
 print(f"\ndone: {RUN_DIR}/depletion_results.h5")
 print("read it with: RUN_DIR=" + str(RUN_DIR) + " python read_depletion_7yr.py")
