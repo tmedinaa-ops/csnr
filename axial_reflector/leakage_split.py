@@ -36,19 +36,46 @@ if not MODEL_XML.exists():
 
 model = openmc.Model.from_model_xml(str(MODEL_XML))
 
-# one mesh cell spanning the whole reactor. Shrink a hair off the bounding box so
-# the faces sit just inside the vacuum boundary and catch neutrons as they exit.
-bbox = model.geometry.bounding_box
-ll = np.array(bbox.lower_left, dtype=float)
-ur = np.array(bbox.upper_right, dtype=float)
-if not (np.all(np.isfinite(ll)) and np.all(np.isfinite(ur))):
-    raise SystemExit("geometry bounding box is unbounded; the outer boundary is not "
-                     "vacuum-closed. Set the mesh extents by hand for this model.")
-eps = 1e-3 * (ur - ll)
-mesh = openmc.RegularMesh()
-mesh.dimension = [1, 1, 1]
-mesh.lower_left = (ll + eps).tolist()
-mesh.upper_right = (ur - eps).tolist()
+
+def reactor_extent(model):
+    """Radius and z-span of the physical reactor. The snap model has an unbounded
+    'outside' cell so geometry.bounding_box returns inf; fall back to the outermost
+    real surfaces (ZCylinder radius, ZPlane z0). Override with env vars if needed."""
+    if os.environ.get("MESH_R"):
+        return (float(os.environ["MESH_R"]),
+                float(os.environ["MESH_ZMIN"]), float(os.environ["MESH_ZMAX"]))
+    bb = model.geometry.bounding_box
+    ll, ur = np.array(bb.lower_left, float), np.array(bb.upper_right, float)
+    if np.all(np.isfinite(ll)) and np.all(np.isfinite(ur)):
+        R = max(ur[0], -ll[0], ur[1], -ll[1])
+        return R, ll[2], ur[2]
+    # scan surfaces
+    surfs = model.geometry.get_all_surfaces().values()
+    radii = [s.r for s in surfs if isinstance(s, openmc.ZCylinder)]
+    zs = [s.z0 for s in surfs if isinstance(s, openmc.ZPlane)]
+    spheres = [s.r for s in surfs if isinstance(s, openmc.Sphere)]
+    if spheres and not radii:
+        R = max(spheres); return R, -R, R
+    if not radii or not zs:
+        raise SystemExit("could not infer reactor extent from surfaces; set MESH_R, "
+                         "MESH_ZMIN, MESH_ZMAX (e.g. the reflector OD/2 and the axial "
+                         "reflector ends; for SNAP roughly R=16.5, z=-16.5..16.5 cm)")
+    return max(radii), min(zs), max(zs)
+
+
+R, zmin, zmax = reactor_extent(model)
+print(f"reactor extent: R={R:.2f} cm, z={zmin:.2f}..{zmax:.2f} cm")
+
+# cylindrical mesh, faces just inside the physical boundary so escaping neutrons
+# cross them before they are killed. The r=R face is radial leakage; the two z
+# faces are axial. A cylindrical mesh (not a box) is what makes that split clean.
+er, ez = 1e-3 * R, 1e-3 * (zmax - zmin)
+mesh = openmc.CylindricalMesh(
+    r_grid=[0.0, R - er],
+    phi_grid=[0.0, 2 * np.pi],
+    z_grid=[zmin + ez, zmax - ez],
+    origin=(0.0, 0.0, 0.0),
+)
 
 leak = openmc.Tally(name="leak")
 leak.filters = [openmc.MeshSurfaceFilter(mesh)]
@@ -73,34 +100,28 @@ print(df.to_string())
 
 
 # ---- axial vs radial grouping -------------------------------------------------
-# Prefer the label column if present ('mesh surface' / 'surf'); else fall back to
-# the documented positional order for a 1x1x1 mesh:
-#   [x-min, x-max, y-min, y-max, z-min, z-max], each net-outward with 'current'.
+# Cylindrical mesh surfaces: the r=R (outer radial) face is radial leakage, the two
+# z faces are axial. r=0 and the two phi faces carry no net leakage. Prefer the
+# dataframe surface labels ('z...' -> axial, 'r...'/'x'/'y' -> radial); fall back to
+# summing |net current| bins if labels are missing.
 def group_axial_radial(df, tally):
     label_col = next((c for c in df.columns if "surf" in c.lower()), None)
     vals = np.abs(tally.mean.ravel())
     if label_col is not None:
         labels = df[label_col].astype(str).str.lower().values
-        axial = sum(v for lab, v in zip(labels, vals) if "z-" in lab or "zmin" in lab or "zmax" in lab)
-        radial = sum(v for lab, v in zip(labels, vals) if ("x-" in lab or "y-" in lab
-                                                           or "xmin" in lab or "xmax" in lab
-                                                           or "ymin" in lab or "ymax" in lab))
+        axial = sum(v for lab, v in zip(labels, vals) if lab.startswith("z") or "z-" in lab or "zmin" in lab or "zmax" in lab)
+        radial = sum(v for lab, v in zip(labels, vals)
+                     if lab.startswith("r") or "r-max" in lab or "rmax" in lab
+                     or "x-" in lab or "y-" in lab or "xmax" in lab or "ymax" in lab or "xmin" in lab or "ymin" in lab)
         if axial + radial > 0:
             return axial, radial
-    # positional fallback
-    if vals.size == 6:
-        xmin, xmax, ymin, ymax, zmin, zmax = vals
-    elif vals.size == 12:  # in/out interleaved per face
-        v = vals.reshape(6, 2).sum(axis=1)
-        xmin, xmax, ymin, ymax, zmin, zmax = v
-    else:
-        raise SystemExit(f"unexpected {vals.size} surface bins; inspect the dataframe above")
-    return zmin + zmax, xmin + xmax + ymin + ymax
+    raise SystemExit("could not label mesh surfaces automatically; read the printed "
+                     "dataframe and sum the z-faces (axial) vs the r-outer face (radial) by hand")
 
 
 axial, radial = group_axial_radial(df, t)
 total = axial + radial
-print("\n--- leakage split (net current through the enclosing box) ---")
+print("\n--- leakage split (net current through the mesh) ---")
 print(f"axial (top+bottom): {axial:.4e}   {100*axial/total:5.1f} %")
 print(f"radial (side)     : {radial:.4e}   {100*radial/total:5.1f} %")
 print("\nRead: if axial is a large fraction AND the real geometry has bare ends, end")
