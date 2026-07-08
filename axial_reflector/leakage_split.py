@@ -100,28 +100,35 @@ print(df.to_string())
 
 
 # ---- axial vs radial grouping -------------------------------------------------
-# Cylindrical mesh surfaces: the r=R (outer radial) face is radial leakage, the two
-# z faces are axial. r=0 and the two phi faces carry no net leakage. Prefer the
-# dataframe surface labels ('z...' -> axial, 'r...'/'x'/'y' -> radial); fall back to
-# summing |net current| bins if labels are missing.
-def group_axial_radial(df, tally):
-    label_col = next((c for c in df.columns if "surf" in c.lower()), None)
-    vals = np.abs(tally.mean.ravel())
-    if label_col is not None:
-        labels = df[label_col].astype(str).str.lower().values
-        axial = sum(v for lab, v in zip(labels, vals) if lab.startswith("z") or "z-" in lab or "zmin" in lab or "zmax" in lab)
-        radial = sum(v for lab, v in zip(labels, vals)
-                     if lab.startswith("r") or "r-max" in lab or "rmax" in lab
-                     or "x-" in lab or "y-" in lab or "xmax" in lab or "ymax" in lab or "xmin" in lab or "ymin" in lab)
-        if axial + radial > 0:
-            return axial, radial
-    raise SystemExit("could not label mesh surfaces automatically; read the printed "
-                     "dataframe and sum the z-faces (axial) vs the r-outer face (radial) by hand")
+# For a full-2pi CylindricalMesh, get_pandas_dataframe labels the surfaces with x/y/z
+# headers where x = r, y = phi, z = z. So leakage is the OUTGOING current on:
+#   radial = 'x-max out'  (the r=R outer face)
+#   axial  = 'z-min out' + 'z-max out'
+# The phi faces ('y') net to zero by symmetry, and 'x-min' is the r=0 axis, not leakage.
+def group_axial_radial(df):
+    # flatten possibly-MultiIndex columns to simple strings
+    cols = ["_".join(str(x) for x in c) if isinstance(c, tuple) else str(c)
+            for c in df.columns]
+    d = df.copy(); d.columns = cols
+    surf_col = next(c for c in cols if "surf" in c.lower())
+    mean_col = next(c for c in cols if "mean" in c.lower() and "std" not in c.lower())
+    axial = radial = 0.0
+    for _, row in d.iterrows():
+        lab = str(row[surf_col]).lower()
+        val = float(row[mean_col])
+        if "out" not in lab:              # only outgoing current is leakage
+            continue
+        if lab.startswith("z"):           # z-min/z-max -> axial
+            axial += val
+        elif "x-max" in lab or lab.startswith("r"):  # r=R outer -> radial
+            radial += val
+        # x-min (r=0 axis) and y (phi) are not leakage
+    return axial, radial
 
 
-axial, radial = group_axial_radial(df, t)
+axial, radial = group_axial_radial(df)
 total = axial + radial
-print("\n--- leakage split (net current through the mesh) ---")
+print("\n--- leakage split (outgoing current through the reactor boundary) ---")
 print(f"axial (top+bottom): {axial:.4e}   {100*axial/total:5.1f} %")
 print(f"radial (side)     : {radial:.4e}   {100*radial/total:5.1f} %")
 print("\nRead: if axial is a large fraction AND the real geometry has bare ends, end")
