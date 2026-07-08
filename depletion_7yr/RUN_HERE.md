@@ -32,10 +32,15 @@ POWER_W=120000 python run_depletion_7yr.py     # ~5.1 yr predicted reactivity EO
 ```
 
 Each run: 22 depletion steps (fine early steps for the xenon/samarium transient,
-half-year steps after year 1), 20k particles x 140 batches per step, so roughly
-22 short eigenvalue solves; expect an hour-class run per case on the 20-core box,
-not an overnight. Results land in `run_79kWt_7yr/` and `run_120kWt_7yr/`
-(depletion_results.h5, gitignored).
+half-year steps after year 1). The default is now high statistics, 150k particles x
+250 batches (200 active) per step, ~15x the histories of the old 20k/140 setting.
+This was raised July 2026 after the 1-year clean run showed the old settings inflated
+the reactivity slope with Monte-Carlo noise (-337 to -453 pcm/yr at ~720 pcm k-sigma,
+vs -319 at ~180 pcm clean); the high-stat default targets ~180-200 pcm k-sigma so the
+7-year slope is trustworthy. Expect a multi-hour run per case on the 20-core box, so
+run it to completion (don't read it early) and consider the phone ping below. For a
+quick geometry/plumbing check, override down: PARTICLES=20000 BATCHES=140 INACTIVE=40.
+Results land in `run_79kWt_7yr/` and `run_120kWt_7yr/` (depletion_results.h5, gitignored).
 
 Optional phone ping when done, reusing the tested notifier pattern:
 `POWER_W=79100 python run_depletion_7yr.py && curl -d "79kWt depletion done" ntfy.sh/$NTFY_TOPIC`

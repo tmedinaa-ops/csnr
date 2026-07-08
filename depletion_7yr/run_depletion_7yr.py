@@ -19,7 +19,7 @@ Environment knobs (all optional):
   POWER_W     fission power in watts       [default: 79100]
   TIME_YEARS  mission length               [default: 7]
   RUN_DIR     output directory             [default: run_<P>kWt_<Y>yr]
-  PARTICLES / BATCHES / INACTIVE           [default: 20000 / 140 / 40]
+  PARTICLES / BATCHES / INACTIVE           [default: 150000 / 250 / 50, high-stat]
 
 Usage on the PC (WSL, openmc-env; see RUN_HERE.md for the one-time setup):
   POWER_W=79100  python run_depletion_7yr.py
@@ -42,9 +42,16 @@ MODEL_XML = Path(_env("MODEL_XML", str(Path.home() / "snap" / "model.xml"))).exp
 CHAIN_FILE = Path(_env("CHAIN_FILE", str(Path.home() / "openmc_data" / "chain_endfb80.xml"))).expanduser()
 POWER_W = float(_env("POWER_W", "79100"))
 TIME_YEARS = float(_env("TIME_YEARS", "7"))
-PARTICLES = int(_env("PARTICLES", "20000"))
-BATCHES = int(_env("BATCHES", "140"))
-INACTIVE = int(_env("INACTIVE", "40"))
+# High-statistics default (July 2026): the 1-year clean run showed the reactivity slope
+# from the old 20k-particle settings was inflated by Monte-Carlo noise (it read -337 to
+# -453 pcm/yr at ~720 pcm k-noise; the clean run read -319 at ~180 pcm noise). These
+# settings give ~200 active batches x 150k particles, roughly 15x the histories of the
+# old default, targeting ~180-200 pcm k-sigma so the 7-year slope is trustworthy. It is
+# an hours-class run on the 20-core PC. For a quick geometry/plumbing test, override down,
+# e.g. PARTICLES=20000 BATCHES=140 INACTIVE=40.
+PARTICLES = int(_env("PARTICLES", "150000"))
+BATCHES = int(_env("BATCHES", "250"))
+INACTIVE = int(_env("INACTIVE", "50"))
 RUN_DIR = Path(_env("RUN_DIR", f"run_{POWER_W/1e3:.0f}kWt_{TIME_YEARS:.0f}yr"))
 
 # fuel volume: 37 pins x pi x r_fuel^2 x active length (arXiv 2505.04024 Table I,
