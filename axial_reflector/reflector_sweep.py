@@ -48,6 +48,11 @@ AXIAL_CM = [float(x) for x in _env("AXIAL_CM", "0,5").split(",")]
 PARTICLES = int(_env("PARTICLES", "40000"))
 BATCHES = int(_env("BATCHES", "100"))
 INACTIVE = int(_env("INACTIVE", "30"))
+# active = BATCHES - INACTIVE must be > 0; auto-lower inactive for small smoke-test runs
+if BATCHES <= INACTIVE:
+    INACTIVE = max(5, BATCHES // 3)
+    print(f"note: BATCHES ({BATCHES}) <= INACTIVE, lowering inactive to {INACTIVE} "
+          f"({BATCHES - INACTIVE} active)")
 
 if not MODEL_XML.exists():
     raise SystemExit(f"missing {MODEL_XML}; set MODEL_XML to the snap fig12 model.xml")
@@ -61,49 +66,65 @@ def beryllium():
     return be
 
 
-def _find_outer(model):
-    """Return (radial ZCylinder, z-min ZPlane, z-max ZPlane) among the vacuum surfaces,
-    or raise if the outer boundary is not a simple cylinder + two planes."""
+def _reactor_dims(model):
+    """Core outer cylinder radius and axial extent, from the model's surfaces. The snap
+    fig12 model is a cylindrical reactor (reflector OD ~33 cm) inside a 30 cm vacuum
+    sphere with void around it, so the reflector goes IN that void, hugging the core."""
     surfs = model.geometry.get_all_surfaces().values()
-    vac = [s for s in surfs if getattr(s, "boundary_type", "") == "vacuum"]
-    cyls = [s for s in vac if isinstance(s, openmc.ZCylinder)]
-    planes = [s for s in vac if isinstance(s, openmc.ZPlane)]
-    if len(cyls) != 1 or len(planes) != 2:
-        raise SystemExit(
-            "outer vacuum boundary is not one ZCylinder + two ZPlanes "
-            f"(found {len(cyls)} cyl, {len(planes)} planes). Wire build_variant() to "
-            "snap.py (OPTION A) for this geometry.")
-    planes = sorted(planes, key=lambda p: p.z0)
-    return cyls[0], planes[0], planes[1]
+    radii = [s.r for s in surfs if isinstance(s, openmc.ZCylinder)]
+    zs = [s.z0 for s in surfs if isinstance(s, openmc.ZPlane)]
+    if not radii or not zs:
+        raise SystemExit("no ZCylinder/ZPlane surfaces to size the core; wire the "
+                         "snap.py hook in build_variant()")
+    return max(radii), min(zs), max(zs)
+
+
+def _vacuum_sphere(model):
+    for s in model.geometry.get_all_surfaces().values():
+        if isinstance(s, openmc.Sphere) and getattr(s, "boundary_type", "") == "vacuum":
+            return s
+    return None
 
 
 def _generic_wrap(radial_cm, axial_cm):
+    """Add beryllium against the core cylinder (radial shell and/or end caps), placed in
+    the void inside the vacuum sphere and carved out of the void cell so nothing overlaps.
+    Enlarges the vacuum sphere if the beryllium would poke through it."""
     model = openmc.Model.from_model_xml(str(MODEL_XML))
     if radial_cm == 0 and axial_cm == 0:
         return model  # baseline, unmodified
 
-    cyl, zlo, zhi = _find_outer(model)
-    R = cyl.r
+    Rc, zlo, zhi = _reactor_dims(model)
     be = beryllium()
     model.materials.append(be)
 
-    # open the old boundary, place the new one further out
-    cyl.boundary_type = "transmissive"
-    zlo.boundary_type = "transmissive"
-    zhi.boundary_type = "transmissive"
-    new_cyl = openmc.ZCylinder(r=R + radial_cm, boundary_type="vacuum")
-    new_zhi = openmc.ZPlane(z0=zhi.z0 + axial_cm, boundary_type="vacuum")
-    new_zlo = openmc.ZPlane(z0=zlo.z0 - axial_cm, boundary_type="vacuum")
+    r_in = openmc.ZCylinder(r=Rc)
+    r_out = openmc.ZCylinder(r=Rc + radial_cm)
+    ztop_in, ztop_out = openmc.ZPlane(z0=zhi), openmc.ZPlane(z0=zhi + axial_cm)
+    zbot_in, zbot_out = openmc.ZPlane(z0=zlo), openmc.ZPlane(z0=zlo - axial_cm)
 
-    root = model.geometry.root_universe
-    if radial_cm > 0:  # radial shell over the original axial span
-        root.add_cell(openmc.Cell(fill=be, region=+cyl & -new_cyl & +zlo & -zhi))
-    if axial_cm > 0:   # end caps out to the new radius
-        root.add_cell(openmc.Cell(fill=be, region=-new_cyl & +zhi & -new_zhi))
-        root.add_cell(openmc.Cell(fill=be, region=-new_cyl & +new_zlo & -zlo))
-    if radial_cm > 0 and axial_cm > 0:  # fill the corner voids left by the shell
-        root.add_cell(openmc.Cell(fill=be, region=+cyl & -new_cyl & +zhi & -new_zhi))
-        root.add_cell(openmc.Cell(fill=be, region=+cyl & -new_cyl & +new_zlo & -zlo))
+    regions = []
+    if radial_cm > 0:                       # radial shell over the core height
+        regions.append(+r_in & -r_out & +zbot_in & -ztop_in)
+    if axial_cm > 0:                        # end caps out to the new radius
+        regions.append(-r_out & +ztop_in & -ztop_out)
+        regions.append(-r_out & +zbot_out & -zbot_in)
+    be_region = regions[0]
+    for r in regions[1:]:
+        be_region = be_region | r
+
+    # make sure the vacuum sphere still encloses the beryllium
+    sph = _vacuum_sphere(model)
+    if sph is not None:
+        need = np.hypot(Rc + radial_cm, max(abs(zhi + axial_cm), abs(zlo - axial_cm)))
+        if sph.r < need + 0.5:
+            sph.r = need + 1.0
+
+    # carve the beryllium footprint out of every void cell, then add the beryllium
+    for c in model.geometry.get_all_cells().values():
+        if c.fill is None and c.region is not None:
+            c.region = c.region & ~be_region
+    model.geometry.root_universe.add_cell(openmc.Cell(fill=be, region=be_region))
     return model
 
 
@@ -126,11 +147,16 @@ def run_k(model):
     return k.nominal_value, k.std_dev
 
 
+_DIMS = None
+
+
 def be_mass_kg(radial_cm, axial_cm):
-    """Approximate added beryllium mass from the outer radius and axial span."""
-    model = openmc.Model.from_model_xml(str(MODEL_XML))
-    cyl, zlo, zhi = _find_outer(model)
-    R, H = cyl.r, (zhi.z0 - zlo.z0)
+    """Approximate added beryllium mass from the core radius and axial span."""
+    global _DIMS
+    if _DIMS is None:
+        _DIMS = _reactor_dims(openmc.Model.from_model_xml(str(MODEL_XML)))
+    R, zlo, zhi = _DIMS
+    H = zhi - zlo
     Rn = R + radial_cm
     v_shell = np.pi * (Rn**2 - R**2) * H if radial_cm > 0 else 0.0
     v_caps = 2 * np.pi * Rn**2 * axial_cm if axial_cm > 0 else 0.0
