@@ -62,49 +62,37 @@ end-of-life flow from `uprate/em_pump_curve.py` at the uprated temperature). Tar
 If the coupled peak fuel at 79 kWt comes out below 970 K, the ceiling is higher than the analytic
 79 kWt (feedback flattened the peak); if above, lower. Report the number either way.
 
-## Deck changes to apply (from the Mac analysis)
+## Deck changes: ALREADY APPLIED (July 21 2026)
 
-The base `layer2_core` decks use constant NaK properties and no bundle friction. Apply the two
-upgrades the dossier specifies; both are MOOSE built-ins, no C++.
+The A1/A2 upgrades and the convergence fixes below are now IN the committed decks; a
+`git pull` delivers them. Nothing to hand-edit except the case switches:
 
-A1, temperature-dependent NaK (in `thm.i`, replace the SimpleFluidProperties block):
+- `thm.i` carries NaKFluidProperties (A1) and Closures1PhaseTHM with cheng_todreas +
+  mikityuk on the bundle geometry (A2); the constant f and the frozen Hw = 5.01e4 are
+  gone, so the wall HTC is now computed, not imposed.
+- `openmc.i` runs the solid as a warm-started TransientMultiApp (state persists across
+  outer steps instead of resetting cold each step, the 73%-closure stall mode).
+- `gen_per_pin.py` emits solid_core.i retimed to the parent (dt = 1.0, open-ended) with
+  interface relaxation on the stiff wall exchange (relaxation_factor = 0.7,
+  transformed_variables = 'T_fluid'). Re-run `python gen_per_pin.py` after pulling.
+- `thm.i` no longer uses steady_state_detection (it saved sub-cycles only under the old
+  one-big-step timing and could hard-fail the warm-started parent); the channels now
+  integrate toward steady across outer steps.
 
-```
-[FluidProperties]
-  [nak]
-    type = NaKFluidProperties   # eutectic NaK-78, T-dependent, Foust 1972
-  []
-[]
-```
+Case switches (set BOTH together): `openmc.i` `power = 34000` for Case 1 / `79000` for
+Case 2, and `thm.i` per-channel `m_dot = 0.0167541` (Case 1) / `0.0197` (Case 2).
 
-A2, Cheng-Todreas tight-lattice friction (in the THM closures):
+## If it still will not converge
 
-```
-[Closures]
-  [thm_closures]
-    type = Closures1PhaseTHM
-    wall_ff_closure  = cheng_todreas
-    wall_htc_closure = mikityuk     # liquid-metal rod-bundle Nusselt, better than a pipe Nu
-  []
-[]
-# in the FlowChannel1Phase: D_h = 3.822e-3, PoD = 1.008, bundle_array = HEXAGONAL,
-# subchannel_type = INTERIOR; drop any constant f.
-```
-
-Power: in `openmc.i`, set `power = 34000` for Case 1, `power = 79000` for Case 2. Flow: set the
-per-channel `m_dot` in `thm.i` to 0.0167541 (Case 1) and ~0.0197 (Case 2).
-
-## Make it converge (the Layer 2 open item)
-
-The full-core conjugate did not converge on the Mac because the wall-to-fluid coupling is stiff
-(htc ~5e4, the solid sheds 34 kW across a ~0.6 K wall-fluid gap). The fix, documented in
-`layer2_core/Layer2_Fix_Notes.md`, is to warm-start the solid and relax the interface
-temperature: switch the solid sub-app from FullSolveMultiApp to a warm-started TransientMultiApp
-so the stiff conjugate accumulates across outer steps instead of resetting cold, and add interface
-relaxation (`transformed_variables = 'T_fluid'`). Tune it on the single pin (`two_way/`) first,
-which converged this same coupling, then run the full core. The OpenMC-as-main architecture
-(already in `openmc.i`) keeps the eigenvalue solves to ~15, so the cost is the conjugate inner
-loop, not the neutronics.
+The stall physics: the wall-to-fluid coupling is stiff (htc ~5e4, the solid sheds 34 kW
+across a ~0.6 K wall-fluid gap). The applied fixes attack exactly that (warm start +
+interface relaxation). If max_fuel_T is still climbing at outer step 15, raise
+`num_steps` in openmc.i first (warm-started steps are cheap), then the solid's
+`fixed_point_max_its`; if it oscillates instead, drop the solid's `relaxation_factor`
+toward 0.5. The single pin (`two_way/`), which converged this same coupling, is the
+cheap place to reproduce any remaining misbehavior. The OpenMC-as-main architecture
+keeps the eigenvalue solves to ~15, so the cost is the conjugate inner loop, not the
+neutronics.
 
 ## Run commands (WSL2, moose conda env, cardinal-opt built)
 

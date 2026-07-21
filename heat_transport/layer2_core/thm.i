@@ -3,7 +3,21 @@
 # =============================================================================
 # Identical physics to mvp/thm.i, but the channel runs along z (the 3-D pin
 # axis) instead of y, so orientation and the LayeredAverage direction are z.
-# Launched automatically by solid_3d.i. SI units.
+# Launched automatically by solid_core.i (37 single-instance apps). SI units.
+#
+# UPGRADED July 21 2026 (uprate dossier A1/A2, per cardinal_validation/RUN_HERE.md):
+#   A1  SimpleFluidProperties (constant, 783 K values) -> NaKFluidProperties
+#       (eutectic NaK-78, temperature dependent, Foust 1972). Needed because the
+#       uprate case runs the channel 755 -> ~900 K, far off any single-point props.
+#   A2  Closures1PhaseSimple + constant f=0.02 + frozen Hw=5.01e4 ->
+#       Closures1PhaseTHM with wall_ff_closure = cheng_todreas (tight-lattice
+#       rod-bundle friction, P/D = 1.008) and wall_htc_closure = mikityuk
+#       (liquid-metal rod-bundle Nusselt). The [ht] component's constant Hw is
+#       REMOVED so the closure computes the wall HTC; the Hw aux/UserObject chain
+#       below picks up the computed material property unchanged, so the solid
+#       coupling now receives a physical, T- and flow-dependent htc.
+# CASE FLOW (cardinal_validation/RUN_HERE.md): Case 1 (34 kWt) per-channel
+# mdot = 0.0167541; Case 2 (79 kWt) mdot = 0.0197 (pump-coupled EOL flow).
 # =============================================================================
 
 T_in   = 755.37
@@ -13,33 +27,27 @@ A_flow = 9.530e-5
 D_h    = 3.822e-3
 P_hf   = 0.0997456
 L      = 0.310515
-Hw     = 5.01e4
 n_ax   = 30
 
 [GlobalParams]
   initial_p   = ${p_out}
   initial_vel = 0.233
   initial_T   = ${T_in}
-  closures    = simple_closures
+  closures    = thm_closures
   fp          = nak
 []
 
 [FluidProperties]
   [nak]
-    type = SimpleFluidProperties
-    density0             = 755.92
-    viscosity           = 1.8835e-4
-    thermal_conductivity = 26.2345
-    cp                  = 879.903
-    cv                  = 879.903
-    thermal_expansion   = 2.5e-4
-    bulk_modulus        = 1.0e9
+    type = NaKFluidProperties   # A1: eutectic NaK-78, T-dependent, Foust/Bomelburg 1972
   []
 []
 
 [Closures]
-  [simple_closures]
-    type = Closures1PhaseSimple
+  [thm_closures]
+    type = Closures1PhaseTHM
+    wall_ff_closure  = cheng_todreas   # A2: tight-lattice rod-bundle friction
+    wall_htc_closure = mikityuk        # A2: liquid-metal rod-bundle Nusselt
   []
 []
 
@@ -91,7 +99,11 @@ n_ax   = 30
     n_elems     = ${n_ax}
     A   = ${A_flow}
     D_h = ${D_h}
-    f   = 0.02
+    # A2 bundle geometry for the cheng_todreas / mikityuk closures.
+    # NO constant f: the closure supplies the friction factor.
+    PoD = 1.008
+    bundle_array = HEXAGONAL
+    subchannel_type = INTERIOR
   []
   [outlet]
     type = Outlet1Phase
@@ -101,7 +113,8 @@ n_ax   = 30
   [ht]
     type = HeatTransferFromExternalAppTemperature1Phase
     flow_channel = pipe
-    Hw = ${Hw}
+    # NO constant Hw: the mikityuk closure computes the wall HTC (material
+    # property 'Hw'), which the Hw aux -> Hw_uo chain hands to the solid.
     P_hf = ${P_hf}
     initial_T_wall = ${T_in}
     var_type = elemental
@@ -121,12 +134,15 @@ n_ax   = 30
   start_time = 0
   dt = 0.25
   dtmin = 1e-5
-  num_steps = 100000        # high cap; steady_state_detection stops each call early
-  # Stop each THM call once its channel reaches steady (residence ~1.3 s) instead of
-  # grinding the whole sub_cycle window. THM is deterministic, so a norm detector is
-  # safe here (unlike the OpenMC-coupled parent). Large sub-cycle saving.
-  steady_state_detection = true
-  steady_state_tolerance = 1e-8
+  num_steps = 100000        # high cap; the parent's window bounds each call
+  # steady_state_detection REMOVED (July 21 2026): it paid off when the solid took
+  # one dt = 100 step (it cut ~400 sub-cycles per call). Under the warm-started
+  # parent the solid steps dt = 1.0, so each call sub-cycles only ~4 THM steps,
+  # there is nothing left to save, and a sub-app that declares itself steady and
+  # stops advancing can fail later parent steps outright (abort_on_solve_fail).
+  # The channel now integrates toward steady ACROSS outer steps, matching the
+  # warm-start philosophy; convergence is judged at the parent (k, max_fuel_T,
+  # heat closure), not inside each THM call.
   abort_on_solve_fail = true
   solve_type = NEWTON
   line_search = basic

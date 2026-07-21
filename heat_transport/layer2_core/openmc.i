@@ -68,8 +68,10 @@
   # and source from ONE high-statistics STANDALONE solve at the converged temperature.
   particles = 20000
 
-  # FULL CORE thermal power. Set the operating point you want here (34 kWt arXiv/shield;
-  # FS-3 endurance ~40; the 10A/2 uprate toward 50). NaK rise scales as P / 545 W/K.
+  # FULL CORE thermal power. cardinal_validation/RUN_HERE.md cases:
+  #   Case 1 (design, must reproduce): power = 34000.0, thm.i mdot = 0.0167541
+  #   Case 2 (uprate ceiling):         power = 79000.0, thm.i mdot = 0.0197
+  # Change BOTH together; the flow is the pump-coupled value for that power.
   power = 34000.0
 
   scaling = 100.0          # MOOSE mesh in meters -> OpenMC cm
@@ -98,13 +100,19 @@
 
 [MultiApps]
   [solid]
-    type = FullSolveMultiApp
+    type = TransientMultiApp
     input_files = 'solid_core.i'
     execute_on = timestep_end
-    # FullSolve: each outer OpenMC step, run solid_core.i to completion so its
-    # internal fixed-point loop converges the solid<->THM conjugate against the
-    # frozen OpenMC heat source, then hand temperature back. This is what keeps
-    # OpenMC to ONE eigenvalue solve per outer step.
+    # WARM START (July 21 2026, the Layer2_Fix_Notes / RUN_HERE next lever):
+    # was FullSolveMultiApp, which re-solved the solid FROM ITS COLD INITIAL
+    # CONDITION every outer step, so the stiff solid<->THM conjugate restarted
+    # from scratch 15 times and stalled near 73% heat closure. TransientMultiApp
+    # keeps the solid's state between outer steps: each step advances it one dt
+    # from the PREVIOUS converged state, so the conjugate accumulates across the
+    # outer Picard march. The per-step fixed-point loop (its 50, now with
+    # interface relaxation on T_fluid) still converges solid<->THM against the
+    # frozen OpenMC source, and OpenMC still fires ONE eigenvalue solve per step.
+    # solid_core.i's executioner was retimed to match (dt = 1.0, open-ended).
   []
 []
 
