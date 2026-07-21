@@ -6,9 +6,18 @@
 # Launched automatically by solid_core.i (37 single-instance apps). SI units.
 #
 # UPGRADED July 21 2026 (uprate dossier A1/A2, per cardinal_validation/RUN_HERE.md):
-#   A1  SimpleFluidProperties (constant, 783 K values) -> NaKFluidProperties
-#       (eutectic NaK-78, temperature dependent, Foust 1972). Needed because the
-#       uprate case runs the channel 755 -> ~900 K, far off any single-point props.
+#   A1  Fluid EOS = SimpleFluidProperties configured as a NaK-78 liquid (Foust/
+#       Bomelburg 1972 props at the loop-mean T, plus a linear thermal_expansion so
+#       density tracks the 755 -> 900 K span to <0.05%). This REPLACES an attempt to
+#       use NaKFluidProperties directly: that class is a (p,T)-only incompressible
+#       property library with NO sound speed, but THM's compressible FlowChannel1Phase
+#       needs a complete (v,e) EOS (p_from_v_e, c_from_v_e, ...). A tabulated wrapper
+#       cannot supply a sound speed the base class never computes. SimpleFluidProperties
+#       is a complete EOS -- it is what this model ran on before A1, and matches how the
+#       Cardinal openmc_fluid tutorial (IdealGas) and the MOOSE sodium THM case
+#       (StiffenedGas) drive their fluids. See the July 2026 fluid-EOS research note.
+#       density0 is the ZERO-T density, not the operating density; it is back-solved so
+#       rho(T_mean) lands on NaK (the old block's 755.92 quietly gave ~640 kg/m3).
 #   A2  Closures1PhaseSimple + constant f=0.02 + frozen Hw=5.01e4 ->
 #       Closures1PhaseTHM with wall_ff_closure = cheng_todreas (tight-lattice
 #       rod-bundle friction, P/D = 1.008) and wall_htc_closure = mikityuk
@@ -38,26 +47,24 @@ n_ax   = 30
 []
 
 [FluidProperties]
-  # A1, two stages (July 22 2026, PC debug loop): NaKFluidProperties is the real
-  # T-dependent NaK-78 (Foust/Bomelburg 1972) but implements only the (p,T)
-  # interface; THM solves in (v,e) and needs p_from_v_e etc., which it lacks
-  # (allow_imperfect_jacobians does NOT cover missing value calls). So the
-  # tabulated wrapper samples the NaK class over a (p,T) window and constructs
-  # the (v,e) lookup THM needs. Bicubic interpolation of smooth liquid props is
-  # noise-level accurate; the window comfortably brackets the 755-900 K loop.
-  [nak_pt]
-    type = NaKFluidProperties
-    weight_fraction_K = 0.778          # required; only the eutectic is implemented
-  []
+  # NaK-78 as a COMPLETE liquid EOS for THM. Foust/Bomelburg eutectic properties
+  # evaluated at the per-case loop-mean temperature (nak78_properties.py).
+  # thermal_expansion carries the density variation across the channel span, and
+  # bulk_modulus supplies the sound speed the compressible flow solver requires
+  # (~1150 m/s; Mach ~2e-4 at 0.23 m/s -- a numerical closure, not a physical
+  # driver). Verified: density matches NaK to <0.05% over 755-900 K.
+  # Case 1 (34 kWt, mean ~786.5 K) is shown. For Case 2 (79 kWt, mean ~826 K) use:
+  #   density0 = 967.07   thermal_expansion = 3.149e-4   cp = cv = 872.37
+  #   viscosity = 1.7914e-4   thermal_conductivity = 26.567
   [nak]
-    type = TabulatedBicubicFluidProperties
-    input_fp = nak_pt                  # if this build predates 'input_fp', use 'fp'
-    construct_pT_from_ve = true        # build the (v,e) -> (p,T) inverse for THM
-    temperature_min = 500
-    temperature_max = 1200
-    pressure_min = 1.0e3
-    pressure_max = 2.0e6
-    out_of_bounds_behaviour = set_to_closest_bound   # transient excursions clamp, not crash
+    type = SimpleFluidProperties
+    density0             = 964.06      # ZERO-T ref; yields rho = 755.1 kg/m3 at 786.5 K
+    thermal_expansion    = 3.111e-4    # NaK-78 beta at the loop mean (1/K)
+    bulk_modulus         = 1.0e9       # sets sound speed ~1150 m/s (numerical closure)
+    cp                   = 879.31
+    cv                   = 879.31      # cp=cv for a liquid; e = cv*T governs the T rise
+    viscosity            = 1.8758e-4
+    thermal_conductivity = 26.260
   []
 []
 
