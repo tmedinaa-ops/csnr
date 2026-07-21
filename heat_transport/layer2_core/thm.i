@@ -38,8 +38,26 @@ n_ax   = 30
 []
 
 [FluidProperties]
+  # A1, two stages (July 22 2026, PC debug loop): NaKFluidProperties is the real
+  # T-dependent NaK-78 (Foust/Bomelburg 1972) but implements only the (p,T)
+  # interface; THM solves in (v,e) and needs p_from_v_e etc., which it lacks
+  # (allow_imperfect_jacobians does NOT cover missing value calls). So the
+  # tabulated wrapper samples the NaK class over a (p,T) window and constructs
+  # the (v,e) lookup THM needs. Bicubic interpolation of smooth liquid props is
+  # noise-level accurate; the window comfortably brackets the 755-900 K loop.
+  [nak_pt]
+    type = NaKFluidProperties
+    weight_fraction_K = 0.778          # required; only the eutectic is implemented
+  []
   [nak]
-    type = NaKFluidProperties   # A1: eutectic NaK-78, T-dependent, Foust/Bomelburg 1972
+    type = TabulatedBicubicFluidProperties
+    input_fp = nak_pt                  # if this build predates 'input_fp', use 'fp'
+    construct_pT_from_ve = true        # build the (v,e) -> (p,T) inverse for THM
+    temperature_min = 500
+    temperature_max = 1200
+    pressure_min = 1.0e3
+    pressure_max = 2.0e6
+    out_of_bounds_behaviour = set_to_closest_bound   # transient excursions clamp, not crash
   []
 []
 
@@ -56,6 +74,10 @@ n_ax   = 30
     family = MONOMIAL
     order  = CONSTANT
     block  = pipe
+    # Seed with the legacy constant so the FIRST solid<->THM exchange sees a
+    # physical htc instead of an uninitialized 0 (the aux kernel overwrites it
+    # with the mikityuk value from the first timestep_end onward).
+    initial_condition = 5.01e4
   []
 []
 [AuxKernels]
@@ -101,9 +123,11 @@ n_ax   = 30
     D_h = ${D_h}
     # A2 bundle geometry for the cheng_todreas / mikityuk closures.
     # NO constant f: the closure supplies the friction factor.
+    # NOTE (checked vs FlowChannel1Phase docs): bundle_array / subchannel_type are
+    # NOT FlowChannel1Phase parameters; the closure derives them from the two below.
+    heat_transfer_geom = HEX_ROD_BUNDLE
     PoD = 1.008
-    bundle_array = HEXAGONAL
-    subchannel_type = INTERIOR
+    pipe_location = INTERIOR
   []
   [outlet]
     type = Outlet1Phase
