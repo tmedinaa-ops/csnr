@@ -52,6 +52,8 @@ from pathlib import Path
 
 import numpy as np
 import openmc
+import warnings
+warnings.filterwarnings("ignore", message="Another")  # benign cross-load ID reuse in one process
 
 
 def _env(name, default):
@@ -64,7 +66,7 @@ BE_DENSITY = 1.85  # g/cc
 LINER_MAT = _env("LINER_MAT", "zrh").lower()      # zrh (default, matches fuel) or yh2
 LINER_CM = float(_env("LINER_CM", "2.0"))          # hydride liner thickness for config B
 TARGET_WORTH_PCM = float(_env("TARGET_WORTH_PCM", "7500"))  # reactivity to recover
-BE_CM = [float(x) for x in _env("BE_CM", "0,2,4,6,8,10,13,16").split(",")]
+BE_CM = [float(x) for x in _env("BE_CM", "0,3,6,9,12,16,20,24").split(",")]
 EXPECT_KBASE = float(_env("EXPECT_KBASE", "1.0005"))  # 1.0005 fig12 HEU; ~0.93 HALEU-loaded
 KBASE_TOL = float(_env("KBASE_TOL", "0.02"))
 WIRE_RING = _env("WIRE_RING", "0") == "1"          # set 1 only after snap.py hook is added
@@ -135,30 +137,33 @@ def _layered_wrap(be_cm, liner_cm):
     """Radial hydride liner [Rc, Rc+liner] then beryllium [Rc+liner, Rc+liner+be], over the
     core height, placed in the void inside the vacuum sphere and carved out of the void."""
     model = openmc.Model.from_model_xml(str(MODEL_XML))
+    model.tallies = openmc.Tallies()   # k-eff only; drop the model's heat mesh so variants run fast
     if be_cm == 0 and liner_cm == 0:
         return model  # baseline
 
     Rc, zlo, zhi = _reactor_dims(model)
-    r0 = Rc
-    r1 = Rc + liner_cm
-    r2 = r1 + be_cm
+    r0, r1, r2 = Rc, Rc + liner_cm, Rc + liner_cm + be_cm
 
     s0 = openmc.ZCylinder(r=r0)
     zbot, ztop = openmc.ZPlane(z0=zlo), openmc.ZPlane(z0=zhi)
 
-    add_cells, footprint = [], None
+    add_cells, new_mats, footprint = [], [], None
     if liner_cm > 0:
         s1 = openmc.ZCylinder(r=r1)
         reg = +s0 & -s1 & +zbot & -ztop
-        add_cells.append(openmc.Cell(fill=hydride(), region=reg))
-        footprint = reg if footprint is None else (footprint | reg)
+        m = hydride(); m.id = 90002
+        add_cells.append(openmc.Cell(cell_id=90002, fill=m, region=reg))
+        new_mats.append(m)
+        footprint = reg
         r_be_in = s1
     else:
         r_be_in = s0
     if be_cm > 0:
         s2 = openmc.ZCylinder(r=r2)
         reg = +r_be_in & -s2 & +zbot & -ztop
-        add_cells.append(openmc.Cell(fill=beryllium(), region=reg))
+        m = beryllium(); m.id = 90001
+        add_cells.append(openmc.Cell(cell_id=90001, fill=m, region=reg))
+        new_mats.append(m)
         footprint = reg if footprint is None else (footprint | reg)
 
     sph = _vacuum_sphere(model)
@@ -172,6 +177,8 @@ def _layered_wrap(be_cm, liner_cm):
             c.region = c.region & ~footprint
     for c in add_cells:
         model.geometry.root_universe.add_cell(c)
+    for m in new_mats:                 # THE FIX: register the added materials on the model
+        model.materials.append(m)
     return model
 
 
