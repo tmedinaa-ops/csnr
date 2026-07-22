@@ -101,9 +101,36 @@ Eyeball the printed tally dataframe once to confirm the face labels (the script 
 `MeshSurfaceFilter` bin labels have shifted across OpenMC versions), then read the axial/radial
 percentages at the bottom.
 
-## Record back here
+## Result (measured July 22 2026, PC)
 
-After the run, append the measured k-eff and the axial/radial percentages, and mark the
-prediction hit or miss. If axial cleared 40%, move to `Axial_Reflector_Variant_Guide.md` and
-build the caps. If not, the lever is radial, and given the no-Be constraint, the next note is a
-moderating-radial-reflector option, not thicker beryllium.
+Run: fig12 core, 200k particles, 150 batches, 30 inactive. Face labels confirmed
+(`x-max out` = radial, `z-min/z-max out` = axial). k-eff = 1.00048 +/- 0.00023, consistent
+with the validated fig12 value, so the model is right.
+
+Measured split, post-reflector, through the outer boundary:
+
+- radial (side): 3.4446e-01, **70.4%**
+- axial (top+bottom): 1.4506e-01, **29.6%**
+
+**Prediction: near-miss, under-called radial.** Predicted radial 55-70% / axial 30-45%; measured
+lands at the radial edge of that band, 70.4 / 29.6. Direction was right (radial still dominates
+post-reflector, as the bare 82/18 buckling said), but the 5.3 cm radial Be suppressed radial
+escape less than assumed: bare 82% radial fell only to 70%, not to the ~62% band midpoint. The
+geometry's radial bias is strong enough to survive a good radial reflector.
+
+**Decision: the lever is radial, not axial.** Axial leakage is 29.6%, short of the ~40% gate that
+would justify end caps, and radial is above the 65% "thicken radial instead" line. So the branch's
+core premise, that end caps are a cheap high-yield lever, is not supported by the measurement. End
+caps would attack the minority 30% while the radial face keeps 70% of the escapes even with its
+existing beryllium.
+
+**Consequence under the no-beryllium constraint.** The radial face already carries the 5.3 cm Be,
+so a non-Be radial gain is either a moderating radial reflector (a hydride liner that thermalizes
+and returns leaking neutrons) or the fatter-core move (add a fuel ring, which cuts the dominant
+radial buckling term ~32%). Both act on the radial face the tally just flagged. The next note is
+the moderating-radial-reflector option. The axial-cap variant in `Axial_Reflector_Variant_Guide.md`
+drops to a secondary, low-yield lever and should not be built first.
+
+Third independent look to land on the radial face: reflector-worth-per-kg (HALEU study), bare
+buckling (this note), and now measured post-reflector leakage all point to the sides. There is no
+axial shortcut around it.
