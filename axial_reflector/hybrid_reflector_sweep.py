@@ -44,6 +44,12 @@ haleu_test model (de-enriched + TRIGA loading) and set EXPECT_KBASE to that core
   MODEL_XML=~/snap/model_haleu.xml EXPECT_KBASE=0.93 TARGET_WORTH_PCM=7500 \
       LINER_CM=2 OMP_NUM_THREADS=20 PARTICLES=200000 BATCHES=150 python hybrid_reflector_sweep.py
 
+To sweep the Li-7 + Nb-1Zr refractory core, add MATSWAP=li_nb and set EXPECT_KBASE to the
+swapped baseline (~0.876 at U_MULT=3, which is the NaK/Hastelloy 0.869 plus the ~970 pcm swap):
+  MODEL_XML=~/snap/haleu_test/m3/model.xml MATSWAP=li_nb EXPECT_KBASE=0.876 KBASE_TOL=0.01 \
+      TARGET_WORTH_PCM=14200 LINER_CM=2 OMP_NUM_THREADS=20 PARTICLES=200000 BATCHES=150 \
+      python hybrid_reflector_sweep.py
+
 Self-check (rule 6): baseline k must land within EXPECT_KBASE +/- KBASE_TOL, or the wrong
 model is loaded and the run aborts before writing anything.
 """
@@ -70,6 +76,10 @@ BE_CM = [float(x) for x in _env("BE_CM", "0,3,6,9,12,16,20,24").split(",")]
 EXPECT_KBASE = float(_env("EXPECT_KBASE", "1.0005"))  # 1.0005 fig12 HEU; ~0.93 HALEU-loaded
 KBASE_TOL = float(_env("KBASE_TOL", "0.02"))
 WIRE_RING = _env("WIRE_RING", "0") == "1"          # set 1 only after snap.py hook is added
+MATSWAP = _env("MATSWAP", "").lower()               # "" = none; "li_nb" = NaK->Li-7 + Ni-steel->Nb-1Zr
+LI7_ENRICH = float(_env("LI7_ENRICH", "99.99"))     # atom % Li-7 (MATSWAP=li_nb)
+LI_DENSITY = float(_env("LI_DENSITY", "0.49"))      # g/cc, liquid Li
+NB_DENSITY = float(_env("NB_DENSITY", "8.57"))      # g/cc, Nb-1Zr
 PARTICLES = int(_env("PARTICLES", "40000"))
 BATCHES = int(_env("BATCHES", "100"))
 INACTIVE = int(_env("INACTIVE", "30"))
@@ -79,6 +89,9 @@ if BATCHES <= INACTIVE:
 
 if not MODEL_XML.exists():
     raise SystemExit(f"missing {MODEL_XML}; set MODEL_XML to the snap model.xml")
+
+if MATSWAP:
+    print(f"MATSWAP active: {MATSWAP}  (Li-7 {LI7_ENRICH} at%, Nb-1Zr on every Ni-bearing material)")
 
 
 # ----------------------------------------------------------------------------- materials
@@ -115,6 +128,57 @@ def hydride():
 LINER_DENSITY = 4.30 if LINER_MAT == "yh2" else 5.66
 
 
+# --------------------------------------------------------------- optional Li-7 + Nb-1Zr swap
+def _li7():
+    m = openmc.Material(name="Li-7 coolant")
+    a7 = LI7_ENRICH / 100.0
+    m.add_nuclide("Li7", a7)
+    if a7 < 1.0:
+        m.add_nuclide("Li6", 1.0 - a7)
+    m.set_density("g/cm3", LI_DENSITY)
+    return m
+
+
+def _nb1zr():
+    m = openmc.Material(name="Nb-1Zr")
+    m.add_element("Nb", 0.99, "wo")
+    m.add_element("Zr", 0.01, "wo")
+    m.set_density("g/cm3", NB_DENSITY)
+    return m
+
+
+def _apply_li_nb(model):
+    """Swap NaK coolant -> Li-7 and every Ni-bearing material (Hastelloy-N clad + Ni steels)
+    -> Nb-1Zr, same targeting as li_nb_base_reactivity.py. This is the full lithium-cooled
+    refractory core, not clad-only, because hot lithium forces the steel out too."""
+    repl = {}
+    for mat in model.geometry.get_all_materials().values():
+        nucs = mat.get_nuclides()
+        if "Na23" in nucs:
+            repl[mat.id] = _li7()
+        elif "Ni58" in nucs:
+            repl[mat.id] = _nb1zr()
+    if not repl:
+        raise SystemExit("MATSWAP=li_nb: no Na- or Ni-bearing materials found to swap")
+    for cell in model.geometry.get_all_cells().values():
+        f = cell.fill
+        if isinstance(f, openmc.Material) and f.id in repl:
+            cell.fill = repl[f.id]
+        elif isinstance(f, (list, tuple)) and any(isinstance(x, openmc.Material) and x.id in repl for x in f):
+            cell.fill = [repl[x.id] if isinstance(x, openmc.Material) and x.id in repl else x for x in f]
+    model.materials = openmc.Materials(model.geometry.get_all_materials().values())
+
+
+def _fresh_model():
+    """Load the base model, drop the heat mesh, and apply the material swap if MATSWAP is set.
+    Every variant (baseline and reflector) builds on this so the swap is applied consistently."""
+    model = openmc.Model.from_model_xml(str(MODEL_XML))
+    model.tallies = openmc.Tallies()
+    if MATSWAP == "li_nb":
+        _apply_li_nb(model)
+    return model
+
+
 # ------------------------------------------------------------------------------ geometry
 def _reactor_dims(model):
     surfs = model.geometry.get_all_surfaces().values()
@@ -136,10 +200,9 @@ def _vacuum_sphere(model):
 def _layered_wrap(be_cm, liner_cm):
     """Radial hydride liner [Rc, Rc+liner] then beryllium [Rc+liner, Rc+liner+be], over the
     core height, placed in the void inside the vacuum sphere and carved out of the void."""
-    model = openmc.Model.from_model_xml(str(MODEL_XML))
-    model.tallies = openmc.Tallies()   # k-eff only; drop the model's heat mesh so variants run fast
+    model = _fresh_model()             # base model + material swap (if MATSWAP set), heat mesh dropped
     if be_cm == 0 and liner_cm == 0:
-        return model  # baseline
+        return model  # baseline (material swap already applied if MATSWAP set)
 
     Rc, zlo, zhi = _reactor_dims(model)
     r0, r1, r2 = Rc, Rc + liner_cm, Rc + liner_cm + be_cm
