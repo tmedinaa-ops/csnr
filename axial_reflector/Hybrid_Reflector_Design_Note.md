@@ -103,8 +103,40 @@ First-run checks: verify the layers landed where you expect with a `plots.xml`
 baseline k is off `EXPECT_KBASE` the run aborts, which means the wrong model loaded). To enable
 config C, wire the `snap.py` hook in `build_variant()` (Option A) and set `WIRE_RING=1`.
 
-## Record back here
+## Result (U_MULT=3, LINER_CM=2 ZrH, measured July 22 2026, PC)
 
-Append the winning config, the beryllium at target for A and B, the kilograms saved, and the
-liner thickness that minimised beryllium. If A and B missed target, note it and move to the
-ring hook. That result is what decides the fork.
+Baseline: U_MULT=3 (TRIGA-loaded, 25 wt% U), REFL_R=0, k = 0.869. Gap to critical 15,083 pcm.
+
+Two findings, both negative for the original hypothesis.
+
+**1. Radial beryllium alone cannot make this core critical.** Config A (be only) worth climbs then
+saturates: 3 cm gives +4960 pcm, but the curve flattens hard, +11,811 at 16 cm and only +12,485 at
+24 cm (283 kg Be, k = 0.975). The ceiling is k ~ 0.976, about 2,600 pcm short of critical, and 60 kg
+of extra beryllium past 12 cm buys almost nothing. This is the leakage split realised: a radial shell
+kills the radial 70% of leakage, but the axial 30% is a floor it cannot touch, and on a core this far
+subcritical that floor is enough to hold k below 1. To close the last stretch you need axial
+reflection (a near-sphere or end caps, which is why the HALEU study's R~25 cm sphere reached critical
+where this cylinder does not) or more loading.
+
+**2. The 2 cm ZrH liner is a net loss at the worths this core needs.** It helps only while beryllium
+is thin: liner-only is worth +3750 pcm, and through ~6 cm Be config B leads A (at 6 cm, +8505 vs
++7977). Above ~7-8 cm the curves cross and B falls behind, and B's ceiling (k ~ 0.959, +10,729 pcm)
+is ~1,750 pcm BELOW A's. The hydride thermalizes neutrons before they reach the beryllium and then
+parasitically absorbs a share of them (H and Zr capture), which lowers the achievable ceiling. Even
+where B does save beryllium at a fixed sub-ceiling target (~14 kg at the +6,869 pcm point), it adds
+~30 kg of ZrH to do it, so it trades a constrained material for a larger total mass, and it cannot
+reach the worths that matter here at all.
+
+**Verdict.** The liner does not pay on this core, and radial-only reflection cannot reach criticality
+regardless of liner. The beryllium-minimising path is not the liner. It is, in order: (a) raise
+uranium loading toward saturation first, because that buys reactivity with uranium rather than
+beryllium and shrinks the 15,083 pcm gap the reflector must close; (b) reflect BOTH faces once the gap
+is small enough, since the axial floor is what caps a radial shell. Next run: build U_MULT=4 (m4) and
+re-baseline; if it starts near 0.90-0.93 the reflector burden roughly halves. Only test LINER_CM=1
+if a thinner liner is wanted for the thin-Be regime; the 2 cm result already rules the liner out for
+the recovery-sized worths.
+
+Correction to the earlier leakage-split guidance: "spend beryllium radially, axial caps are
+low-yield" holds for trimming a small margin near critical, where radial is 70% of the leakage. It
+does NOT hold for closing a deep subcritical gap, where the radial reflector saturates and the
+unreflected axial 30% becomes the binding constraint. Different regimes, opposite conclusions.
