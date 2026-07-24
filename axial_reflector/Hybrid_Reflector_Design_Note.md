@@ -140,3 +140,36 @@ Correction to the earlier leakage-split guidance: "spend beryllium radially, axi
 low-yield" holds for trimming a small margin near critical, where radial is 70% of the leakage. It
 does NOT hold for closing a deep subcritical gap, where the radial reflector saturates and the
 unreflected axial 30% becomes the binding constraint. Different regimes, opposite conclusions.
+
+## Result 2 (m4 + Li-7/Nb-1Zr, first critical config, measured July 22 2026, PC)
+
+Two levers stacked onto the m3 case closed the gap. Loading m3 -> m4 (U_MULT 3 -> 4) lifted the
+NaK baseline from 0.869 to 0.889 and the radial-Be ceiling from ~0.976 to 0.994, still short. The
+Li-7 + Nb-1Zr swap then added ~710 pcm of floor on m4 (less than m3's ~970, because more uranium
+dilutes the coolant/clad absorption) plus ~450 pcm of reflector amplification (a cleaner-absorbing
+core returns reflected neutrons at higher worth; the be-only worth edge over NaK grows with
+thickness). Together that was the ~1,160 pcm that tips m4 over.
+
+Measured, m4 Li/Nb, radial be-only: k = 0.99880 at 16 cm, 1.00280 at 20 cm, 1.00525 at 24 cm.
+**First critical configuration in the study: crosses k = 1 at ~17.5 cm of radial beryllium,
+~182 kg, no liner and no ring.** U_MULT=4, Li-7 coolant, Nb-1Zr clad and structure.
+
+Liner: definitively out. Config B tops at k = 0.98948 at 24 cm (303 kg Be + 44 kg ZrH) and never
+reaches critical. On the one core that can go critical, the liner drags it back under. Do not build it.
+
+Three caveats on "critical," in order of how much they matter.
+1. Hydrogen life is the gate, not k. The excess is thin (+280 pcm at 20 cm, +520 at 24 cm) and the
+   Nb clad is a hydrogen getter, so it pulls hydrogen out of the ZrH over the mission, which is a
+   negative-reactivity drift the static eigenvalue cannot see and which is the same order as the
+   excess. Until the hydrogen-loss life of a Nb-clad hydride core is modeled, this criticality is
+   provisional. This is the real open item.
+2. 182 kg of beryllium is heavy and is the wrong shape. A radial cylinder cannot reflect the axial
+   ends, so it overpays for the 70% it can catch. A near-sphere (snap.py REFL_R) works both faces;
+   the HALEU study reached critical on U_MULT=3 with a ~65 kg sphere. refl_sphere_scan.py finds the
+   minimum-Be critical sphere on this m4 Li/Nb core; expect well under half the radial mass.
+3. This is no longer SNAP. Li-cooled, Nb-clad, refractory, TRIGA-loaded: SP-100-class. The
+   flown-article policy argument does not apply to it. It answers "can the HALEU core be made
+   critical," yes, but as a different reactor.
+
+Next: refl_sphere_scan.py (REFL_R sphere on m4 Li/Nb) for the minimum-beryllium critical point,
+then the Nb/hydride hydrogen-loss life, which decides whether any of this survives the mission.
